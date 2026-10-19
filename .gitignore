@@ -1,0 +1,34 @@
+# Build output
+build/
+backend/build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+# Frontend dependencies and dist
+**/node_modules/
+frontend/dist/
+frontend/coverage/
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Local databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+# Runtime uploads: keep placeholder only
+uploads/*
+!uploads/.gitkeep
+logs/
+# Editors/OS
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
