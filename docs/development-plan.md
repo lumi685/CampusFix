@@ -208,8 +208,8 @@ CampusFix/
 | W6-D1 | 定义纯 C++ WorkOrder/Worker/Candidate 类型与 `DispatchStrategy` 接口 | DispatchStrategy、模型、单测 | 给固定输入得到固定输出 |
 | W6-D2 | 硬筛选：状态、技能/资质、服务区域、人员最大任务容量；输出排除原因 | EligibilityFilter | 不合格人员绝不能出现在前三名 |
 | W6-D3 | 实现技能、区域、负载、历史效率、评价、紧急值班分项评分；排序及推荐解释 | WeightedScoreStrategy | 分数可复算、同分次序稳定 |
-| W6-D4 | 实现推荐 API + 记录快照；派单事务、version 冲突、有效任务数二次确认 | DispatchService、AssignmentService | 两个管理员竞争派单，只能一次成功 |
-| W6-D5 | 开发调度面板：前三名、评分细节、拒绝原因、确认/人工改派；写测试 | DispatchView、TC-DSP-01～08、TC-CON-01～03 | 从 PENDING_DISPATCH 真实变为 PENDING_ACCEPT |
+| W6-D4 | 实现只读推荐 API；确认派单时记录最终重算快照；处理 version、容量与唯一派单冲突 | DispatchService、AssignmentService | 两个管理员竞争派单，只能一次成功 |
+| W6-D5 | 开发调度面板：Top 3、其他合格候选、评分细节、排除原因、确认派单；写测试 | DispatchView、TC-DSP-01～10、TC-CON-01～03 | 从 PENDING_DISPATCH 真实变为 PENDING_ACCEPT；非 Top 3 理由留痕 |
 
 **核心边界**：推荐≠自动派单。`GET candidates` 只能计算和返回候选，不应该修改负责人；`POST assign` 才完成交易。对于多张工单，P1 可进一步用 `std::priority_queue` 实现优先级待办队列、增加策略切换展示；P0 优先把单张工单的推荐做对。
 
@@ -220,7 +220,7 @@ CampusFix/
 | 单元 | 具体要做什么 | 产出 | 自检 |
 |---|---|---|---|
 | W7-D1 | 维修员只对当前自己的 PENDING_ACCEPT 任务接单、拒单并写原因 | Accept/Refuse APIs、WorkerTasks | 拒单后回到 PENDING_DISPATCH，负载释放 |
-| W7-D2 | 转派申请/管理员确认；旧派单记录完结，新负责人重新推荐 | TransferService、transfer UI | 历史负责人和原因保留 |
+| W7-D2 | 维修员转派申请/管理员审批；批准后旧派单结束并重新推荐；补充到场/进度事件 | TransferService、progress event API、transfer UI | 历史负责人和原因保留；无申请主动改派不进入 P0 |
 | W7-D3 | 维修员填写维修过程与结果，转 PENDING_VERIFY；时间线更新 | Complete API、Progress UI | 无完成说明不可提交 |
 | W7-D4 | 报修人验收通过→COMPLETED，未通过→IN_PROGRESS（返工） | Verify API、Verify UI | 只有原报修人能验收，退回原因保留 |
 | W7-D5 | 一次性评价、管理员关闭、流程端到端测试 | EvaluationService、Close API、E2E 场景 | 完整工单从提交到 CLOSED 无人工修改 DB |
@@ -231,7 +231,7 @@ CampusFix/
 
 | 单元 | 具体要做什么 | 产出 | 自检 |
 |---|---|---|---|
-| W8-D1 | 图片上传：扩展名+实际类型+大小、随机存储路径、最多 3 张 | FileService、Upload UI | 非图片、超大图片拒绝，合法图可预览 |
+| W8-D1 | 图片上传：扩展名+实际类型+大小、随机存储路径；报修图/维修结果图分别最多 3 张 | FileService、Upload UI | 非图片、超大/超数图片拒绝，合法图可预览 |
 | W8-D2 | 私有附件下载权限：先授权工单再读文件；异常文件返回 404 | FileController、File tests | 普通用户不可通过 URL 猜图查看别人工单 |
 | W8-D3 | 状态数量、类别分布、人员当前任务量、完成率 API 和 ECharts 图表 | StatisticsService、Dashboard | 数字和数据库手动 SQL 汇总一致 |
 | W8-D4 | 完善登录、角色导航、表格筛选、加载/空状态、错误反馈、手机宽度布局 | frontend UI polish | 主要页面不出现空白崩溃 |
@@ -381,23 +381,23 @@ C++ 业务写 Service，SQL 写 Repository，HTTP 写 Controller；调度评分�
 |---|---|---|
 | TC-AUTH-01 | 正确用户名密码登录 | 返回有效会话并能查询 `/auth/me` |
 | TC-AUTH-02 | 错误密码 | 返回认证失败，不泄露账户细节 |
-| TC-SEC-01 | 学生访问他人工单 | 403 或保密型 404；数据不泄漏 |
-| TC-SEC-02 | 维修员试图审核工单 | 403；状态不变 |
+| TC-SEC-01 | 未登录访问受保护接口 | 401；不返回受保护数据 |
+| TC-SEC-02 | 报修人读取他人工单 | 403 或保密型 404；数据不泄漏 |
 | TC-ORDER-01 | 提交完整报修 | 唯一单号、PENDING_REVIEW、创建日志 |
 | TC-ORDER-02 | 缺少故障描述 | 参数错误，不创建有效工单 |
 | TC-WF-01 | 管理员审核通过 | PENDING_REVIEW→PENDING_DISPATCH |
 | TC-WF-02 | 退回补充后再提交 | 原工单号不变，时间线记录两次操作 |
 | TC-DSP-01 | 技能缺失候选 | 被硬过滤，不出推荐名单 |
-| TC-DSP-02 | 满负载候选 | 不可推荐，不可派单 |
-| TC-DSP-03 | 评分/同分案例 | 公式正确、排序可重复 |
-| TC-DSP-04 | 无候选 | 空结果及排除原因，工单仍待派单 |
+| TC-DSP-02 | 缺少必需资质的候选 | 在硬过滤阶段剔除，不可派单 |
+| TC-DSP-03 | 维修员不可接单/离岗 | 在硬过滤阶段剔除 |
+| TC-DSP-04 | 满负载候选 | 不进入合格候选；排除原因包含满负载 |
 | TC-CON-01 | 两管理员同一工单同时派单 | 只成功一次，另一请求 409 |
 | TC-CON-02 | 两工单争用最后一个容量名额 | 不超最大任务数 |
-| TC-WF-05 | 维修员拒单 | 回到待派单、历史分配结束 |
-| TC-WF-10 | 完工后验收失败 | 回到处理中、记录返工原因 |
-| TC-WF-14 | 同一工单重复评价 | 只有一次有效评价 |
-| TC-FILE-01 | 传非图片或超大图片 | 拒绝且没有可访问附件 |
-| TC-FILE-02 | 下载别人工单附件 | 权限拒绝 |
+| TC-WF-05 | 当前负责人接单 | 进入处理中并记录接单时间 |
+| TC-WF-10 | 当前负责人提交维修结果 | 进入待验收并保存最终提交时间 |
+| TC-WF-14 | 原报修人首次评价 | 在 COMPLETED 保存 1～5 分评价且状态不变 |
+| TC-FILE-01 | 上传合法授权图片 | 保存元数据且授权用户可查看 |
+| TC-FILE-02 | REPORT/REPAIR_RESULT 各已有 3 张后上传各自第 4 张，或上传超 5 MiB 图片 | 分别拒绝且不产生有效附件；两类计数互不占用 |
 | TC-STAT-01 | 看板数量与真实工单比对 | 统计一致 |
 | TC-E2E-01 | 报修到关闭完整流程 | 所有状态、负责人、日志与统计一致 |
 

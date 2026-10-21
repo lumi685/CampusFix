@@ -1,13 +1,13 @@
-# CampusFix 数据库设计（W1-D4）
+# CampusFix 数据库设计
 
-> **版本**：V0.1（W1-D4 设计稿，W1-D5 评审后冻结）
+> **版本**：V1.0（W1-D5 P0 冻结基线）
 >
 > **范围**：SQLite 上的 P0 数据模型；本文不包含正式迁移脚本，也不表示数据库已经创建。
 > **依据**：`docs/SRS.md` 第 45～56 章、`docs/requirements-trace.md`、`docs/flows.md`、`docs/roles.md`。
 
 ## 1. 设计约定
 
-- 表名、字段名使用复数蛇形命名；主键统一为 `INTEGER`，API 中按整数传递。
+- P0 运行时要求 SQLite 3.35 或更高；表名、字段名使用复数蛇形命名；整数主键使用 `INTEGER PRIMARY KEY`，除非证明需要，否则不使用 `AUTOINCREMENT`。字段表中的“自增”仅指 SQLite rowid 自动分配，不表示采用 `AUTOINCREMENT` 关键字。
 - 时间统一保存为 UTC ISO-8601 文本，例如 `2026-10-19T08:30:00.000Z`；展示时由前端转换时区。
 - 布尔值使用 `INTEGER NOT NULL CHECK (value IN (0,1))`；JSON 快照使用 `TEXT`，由服务层校验结构。
 - 业务枚举使用稳定英文码并加 `CHECK` 或服务层白名单。工单状态只能使用 W1-D3 的十个固定码。
@@ -66,7 +66,10 @@ erDiagram
     ASSIGNMENTS ||--o{ TRANSFER_REQUESTS : transfer_of
     WORK_ORDERS ||--o{ TRANSFER_REQUESTS : requests
     WORK_ORDERS ||--o{ STATUS_LOGS : timeline
+    ASSIGNMENTS ||--o{ STATUS_LOGS : emits_events
     WORK_ORDERS ||--o{ DISPATCH_RECORDS : recommendation_history
+    ASSIGNMENTS ||--o| DISPATCH_RECORDS : final_basis
+    WORKERS ||--o{ DISPATCH_RECORDS : selected
     WORK_ORDERS ||--o| EVALUATIONS : evaluated_once
 
     USERS {
@@ -112,6 +115,7 @@ erDiagram
         INTEGER required_skill_id FK
         TEXT code UK
         TEXT default_priority
+        INTEGER target_completion_minutes
     }
     WORKERS {
         INTEGER id PK
@@ -147,6 +151,7 @@ erDiagram
         INTEGER order_id FK
         INTEGER worker_id FK
         INTEGER assigned_by FK
+        TEXT result_submitted_at
         TEXT ended_at
     }
     TRANSFER_REQUESTS {
@@ -160,13 +165,17 @@ erDiagram
         INTEGER id PK
         INTEGER order_id FK
         INTEGER actor_id FK
+        INTEGER assignment_id FK
         TEXT action
-        TEXT visibility
+        TEXT public_note
+        TEXT internal_note
     }
     DISPATCH_RECORDS {
         INTEGER id PK
         INTEGER order_id FK
         INTEGER requested_by FK
+        INTEGER selected_worker_id FK
+        INTEGER assignment_id FK, UK
         INTEGER order_version
         TEXT weights_json
     }
@@ -218,7 +227,7 @@ erDiagram
 |---|---|---:|---|---|
 | `id` | INTEGER | 否 | 自增 | PK |
 | `user_id` | INTEGER | 否 | 无 | FK → `users.id`；主要服务于 `sysadmin` 显式业务授权 |
-| `capability` | TEXT | 否 | 无 | `AREA_SCOPE/BUSINESS_READ/REVIEW/DISPATCH/CANCEL/CLOSE/WORKER_MANAGE/STATS_VIEW/INTERNAL_NOTE_READ/SYSTEM_MANAGE` |
+| `capability` | TEXT | 否 | 无 | CHECK：`AREA_SCOPE/BUSINESS_READ/REVIEW/DISPATCH/CANCEL/CLOSE/WORKER_MANAGE/STATS_VIEW/INTERNAL_NOTE_READ` |
 | `scope_location_id` | INTEGER | 是 | NULL | FK → `locations.id`；NULL 表示该能力的全局范围，不表示拥有其他能力 |
 | `granted_by` | INTEGER | 否 | 无 | FK → `users.id` |
 | `granted_at` | TEXT | 否 | 当前 UTC | |
@@ -226,7 +235,7 @@ erDiagram
 
 部分唯一索引：对未撤销记录 `(user_id, capability, COALESCE(scope_location_id, 0))` 唯一。实现时如表达式部分索引兼容性不足，增加规范化的 `scope_key` 字段。索引：`INDEX(user_id, revoked_at)`、`INDEX(scope_location_id, capability)`。
 
-`dispatcher` 按角色拥有管理动作，使用 `AREA_SCOPE` 记录管辖区域；角色权限与区域范围必须同时满足，区域内可读取内部管理信息。`sysadmin` 不使用 `AREA_SCOPE` 推导业务动作，而是必须取得对应 capability（包括读取内部备注）及其范围。没有有效范围记录时不得默认全局。
+`dispatcher` 按角色拥有管理动作，使用 `AREA_SCOPE` 记录管辖区域；角色权限与区域范围必须同时满足，区域内可读取内部管理信息。`sysadmin` 不使用 `AREA_SCOPE` 推导业务动作，而是必须取得对应 capability（包括读取内部备注）；该能力记录的 `scope_location_id` 限定区域，NULL 才表示该能力全局。`AREA_SCOPE` 单独存在不授予 sysadmin 动作。
 
 ### 4.4 `locations`
 
@@ -267,6 +276,7 @@ erDiagram
 | `name` | TEXT | 否 | 无 | |
 | `required_skill_id` | INTEGER | 否 | 无 | FK → `skills.id` |
 | `default_priority` | TEXT | 否 | `NORMAL` | `LOW/NORMAL/HIGH/URGENT` |
+| `target_completion_minutes` | INTEGER | 否 | 无 | CHECK `> 0`；P0 由种子数据按类别固定，用于可复现效率评分 |
 | `requires_certificate` | INTEGER | 否 | `0` | 类别可进一步要求资质 |
 | `active` | INTEGER | 否 | `1` | 布尔 CHECK |
 | `created_at` | TEXT | 否 | 当前 UTC | |
@@ -362,7 +372,7 @@ erDiagram
 | `created_at` | TEXT | 否 | 当前 UTC | |
 | `deleted_at` | TEXT | 是 | NULL | 逻辑删除 |
 
-索引：`UNIQUE(stored_path)`；`INDEX(order_id, purpose, deleted_at)`。每工单最多 3 张有效图片由上传事务内计数并再次校验；不依赖前端计数。
+索引：`UNIQUE(stored_path)`；`INDEX(order_id, purpose, deleted_at)`。每个工单按 `purpose` 分别限制最多 3 张有效图片，即 `REPORT` 最多 3 张且 `REPAIR_RESULT` 最多 3 张；上传短事务内按 `(order_id,purpose,deleted_at IS NULL)` 计数并重查，不依赖前端计数。
 
 ### 4.12 `assignments`
 
@@ -375,6 +385,7 @@ erDiagram
 | `assign_reason` | TEXT | 是 | NULL | 手工调整/改派时必填；推荐首选可选 |
 | `assigned_at` | TEXT | 否 | 当前 UTC | |
 | `accepted_at` | TEXT | 是 | NULL | 接单时间 |
+| `result_submitted_at` | TEXT | 是 | NULL | 最近一次/最终维修结果提交时间；返工再次提交时覆盖，历次时间由日志保留 |
 | `ended_at` | TEXT | 是 | NULL | NULL 表示当前有效派单 |
 | `end_reason` | TEXT | 是 | NULL | `REFUSED/TRANSFERRED/COMPLETED/CANCELLED` 或说明 |
 | `version` | INTEGER | 否 | `1` | 派单记录乐观锁 |
@@ -394,7 +405,7 @@ erDiagram
 | `reviewed_by` | INTEGER | 是 | NULL | FK → `users.id` |
 | `review_reason` | TEXT | 是 | NULL | 审批说明；拒绝时必填 |
 | `created_at` | TEXT | 否 | 当前 UTC | |
-| `reviewed_at` | TEXT | 是 | NULL | |
+| `resolved_at` | TEXT | 是 | NULL | `APPROVED/REJECTED/SUPERSEDED` 的解决时间；系统取代时 `reviewed_by` 为 NULL |
 | `order_version` | INTEGER | 否 | 无 | 申请时工单版本快照 |
 
 部分唯一索引：`UNIQUE(assignment_id) WHERE status='PENDING'`，重复待处理申请返回 409。索引：`INDEX(order_id, status)`。
@@ -406,6 +417,7 @@ erDiagram
 | `id` | INTEGER | 否 | 自增 | PK |
 | `order_id` | INTEGER | 否 | 无 | FK → `work_orders.id` |
 | `actor_id` | INTEGER | 是 | NULL | FK → `users.id`；系统事件可为 NULL，P0 无自动验收 |
+| `assignment_id` | INTEGER | 是 | NULL | FK → `assignments.id`；到场/进度及派单相关事件关联当时派单 |
 | `action` | TEXT | 否 | 无 | 稳定动作码，如 `ORDER_SUBMITTED` |
 | `from_status` | TEXT | 是 | NULL | 创建事件为 NULL，其余用固定状态码 |
 | `to_status` | TEXT | 否 | 无 | 固定状态码；只读事件可与前状态相同 |
@@ -415,7 +427,7 @@ erDiagram
 | `created_at` | TEXT | 否 | 当前 UTC | |
 | `request_id` | TEXT | 否 | 无 | 关联服务日志与幂等排查 |
 
-索引：`INDEX(order_id, created_at, id)`；`INDEX(actor_id, created_at)`。该表只允许插入和查询，普通业务接口不得更新或删除。
+索引：`INDEX(order_id, created_at, id)`；`INDEX(actor_id, created_at)`；部分唯一索引 `UNIQUE(assignment_id) WHERE action='WORKER_ARRIVED'`。该表只允许插入和查询，普通业务接口不得更新或删除。
 
 ### 4.15 `dispatch_records`
 
@@ -424,14 +436,16 @@ erDiagram
 | `id` | INTEGER | 否 | 自增 | PK |
 | `order_id` | INTEGER | 否 | 无 | FK → `work_orders.id` |
 | `requested_by` | INTEGER | 否 | 无 | FK → `users.id` |
-| `order_version` | INTEGER | 否 | 无 | 计算时版本，仅作快照，不能直接用于派单 |
+| `selected_worker_id` | INTEGER | 否 | 无 | FK → `workers.id`；最终选中人员 |
+| `assignment_id` | INTEGER | 否 | 无 | FK → `assignments.id`，UNIQUE；与派单一一对应 |
+| `order_version` | INTEGER | 否 | 无 | 确认派单事务开始时校验的版本 |
 | `strategy` | TEXT | 否 | `WEIGHTED_SCORE_V1` | P0 固定策略 |
 | `weights_json` | TEXT | 否 | 固定六项权重快照 |
-| `candidates_json` | TEXT | 否 | top 3、分项分数、理由、风险及样本标记 |
+| `candidates_json` | TEXT | 否 | 最终重算后的 Top 3、其他合格候选、分项分、排名、理由、风险及样本数 |
 | `excluded_summary_json` | TEXT | 否 | 按硬约束原因聚合 |
 | `created_at` | TEXT | 否 | 当前 UTC | |
 
-索引：`INDEX(order_id, created_at DESC)`。推荐不改变工单、派单或负载；是否记录推荐快照是唯一允许的写入。
+索引：`UNIQUE(assignment_id)`；`INDEX(order_id, created_at DESC)`。API-17 推荐预览严格只读，不插入本表；仅 API-18 确认派单时在同一事务保存最终重算快照。
 
 ### 4.16 `evaluations`
 
@@ -483,7 +497,7 @@ WHERE id = :id AND status = :expected_status AND version = :expected_version;
 
 ### 6.3 派单与负载
 
-派单事务必须依次完成：重新校验管理范围、工单状态/版本、人员状态、技能/资质、区域；通过 `assignments WHERE worker_id=? AND ended_at IS NULL` 实时统计负载；插入新派单；条件更新工单；插入状态日志。部分唯一索引保证并发请求不产生两个有效负责人。任一步失败全部回滚。
+派单使用短 `BEGIN IMMEDIATE` 事务并依次完成：重新校验管理范围、工单状态/版本；读取最新人员状态、技能/资质和区域；通过 `assignments WHERE worker_id=? AND ended_at IS NULL` 实时统计负载；重新计算全部合格候选及排名；校验非 Top 3 理由；插入新派单与最终 `dispatch_records` 快照；条件更新工单；插入状态日志。部分唯一索引保证同工单不产生两个有效负责人，预先取得写锁保证两个不同工单竞争最后一个容量时也不会同时通过旧负载检查。任一步失败全部回滚。
 
 拒单或批准转派事务必须结束当前 `assignments`、更新工单、完成转派申请（如有）并写日志。负载是查询结果，不维护独立计数，因此结束派单即释放负载。
 
@@ -493,10 +507,17 @@ WHERE id = :id AND status = :expected_status AND version = :expected_version;
 |---|---|
 | 审核/退回/拒绝/取消/关闭 | 条件更新工单、关键时间字段、追加状态日志 |
 | 接单 | 条件更新派单 `accepted_at/version`、工单状态/version、状态日志 |
-| 维修完成 | 保存最新 `repair_summary`、工单状态/version、状态日志；把该有效派单尚未处理的转派申请标记为 `SUPERSEDED`；附件已提前安全上传并关联 |
+| 维修完成 | 保存最新 `repair_summary`、更新有效派单 `result_submitted_at`、工单状态/version、状态日志；把该有效派单尚未处理的转派申请标记为 `SUPERSEDED`、写 `resolved_at` 和系统原因；附件已提前安全上传并关联 |
 | 验收通过/不通过 | 通过时工单进入 `COMPLETED` 并结束有效派单（`end_reason=COMPLETED`）以释放负载；不通过时回 `IN_PROGRESS`、`rework_count+1` 并保留有效派单；两者均保留旧结果并追加日志 |
 | 评价 | 校验身份和 `COMPLETED`、插入唯一评价、追加不改状态的评价事件；重复评价整体回滚 |
 | 附件上传 | 临时文件校验后，在短事务内重查工单权限与有效数量并插入元数据；提交后原子移动文件，失败需补偿删除元数据/临时文件 |
+
+### 6.5 历史评分的可复现查询
+
+- 效率有效样本：连接 `assignments → work_orders → fault_categories`，筛选 `assignments.end_reason='COMPLETED'` 且 `accepted_at/result_submitted_at` 非空，按 `ended_at DESC,id DESC` 取最近 20 条。
+- 单样本：`actual_minutes=max(1, accepted_at 到 result_submitted_at 的完整/小数分钟)`；`sample=clamp(100*target_completion_minutes/actual_minutes,0,100)`。样本数小于 3 时返回 60，否则算术平均并四舍五入到 1 位小数。
+- 评价样本：连接 `assignments → work_orders → evaluations`，只取该工单以该维修员的 `COMPLETED` 派单结束者，按评价 `created_at DESC,id DESC` 取最近 20 条；样本数小于 3 返回 60，否则 `AVG(score)*20` 并四舍五入到 1 位小数。
+- 同一输入快照必须产生相同得分；时间差在 Repository 中按 UTC 时间解析，避免依赖 SQLite 本地时区。
 
 ## 7. 历史、删除与一致性要求
 
@@ -507,6 +528,13 @@ WHERE id = :id AND status = :expected_status AND version = :expected_version;
 - 统计只读取授权范围内数据；完成率等口径必须与 API 文档一致，不把前端缓存当作事实来源。
 - 备份、恢复和迁移必须同时覆盖 SQLite 文件与附件目录；复制 SQLite 前使用安全备份机制，不直接复制活跃 WAL 数据文件组合。
 
+### 7.1 外键删除策略
+
+- 历史/业务外键默认 `ON DELETE RESTRICT`：工单、派单、转派、日志、调度快照、评价、分类、位置、技能、维修档案及用户引用均不得级联删除。
+- `auth_sessions.user_id` 可使用 `ON DELETE CASCADE`，但 P0 用户采用停用而非物理删除，因此该规则只用于受控测试/清理。
+- 自引用位置/分类使用 `ON DELETE RESTRICT`；附件元数据同样不级联，采用 `deleted_at` 与补偿清理。
+- 不依赖 `ON UPDATE CASCADE`；所有主键不可变。迁移脚本必须显式写出删除策略，不接受 SQLite 隐式默认行为。
+
 ## 8. 迁移能力边界
 
 - Repository 不暴露 SQLite 专有 SQL 给 Service；部分唯一索引、UPSERT 和日期流水实现集中在迁移/Repository 层。
@@ -514,11 +542,10 @@ WHERE id = :id AND status = :expected_status AND version = :expected_version;
 - 不使用数据库生成的业务语义状态跳转；状态机仍由 Service 控制，数据库负责外键、唯一性、范围和基本 CHECK 防线。
 - 后续迁移 MySQL/PostgreSQL 时需替换日期流水锁策略、部分唯一索引表达方式和 JSON 类型，但 API 字段与业务规则保持不变。
 
-## 9. W1-D5 待确认/同步
+## 9. W1-D5 冻结结论
 
-1. 将 W1-D3 的 `sysadmin` 显式授权、worker 本人报修、内部备注可见性同步到 SRS、决策日志和需求追踪矩阵。
-2. 冻结 `management_grants` 的能力码、区域继承规则及授权数据由 seed/运维还是后续管理 API 维护；复杂授权后台仍为 P1。
-3. 冻结草稿阶段是否生成工单号。本稿选择“正式提交时生成”，避免未提交草稿消耗可展示流水。
-4. 确认 P0 评价是否只保留单一 `score`。SRS 通用章节列出多维评分，但 V1.1 最小接口与追踪矩阵只要求 1～5 总分；本稿不自行扩大字段。
-5. 确认管理员人工选择非 top 3 合格维修员时 `assign_reason` 是否始终必填；本稿规定偏离推荐时必填，仍不得突破硬约束。
-6. 把“验收通过时结束有效派单并释放负载”以及“提交维修结果后待处理转派申请变为 `SUPERSEDED`”同步到流程说明；这是为消除悬挂负载/申请而作的 W1-D4 一致性细化。
+- 16 张 P0 表保持不变；本次补齐评分数据源、过程事件关联、最终派单快照和删除策略，不新增用户功能。
+- 管理能力码由第 4.3 节固定，P0 通过种子数据/受控初始化维护，不提供通用授权后台。
+- 工单号在首次正式提交时生成；评价只保留单项 1～5 分；非 Top 3 派单理由必填。
+- 推荐预览不落库；验收释放负载及转派申请 `SUPERSEDED` 均采用原子事务。
+- 本文仍是逻辑设计，迁移和测试尚未执行。

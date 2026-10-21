@@ -2,12 +2,12 @@
 
 ## 项目需求说明书
 
-**文档版本：** V1.1（需求基线完善稿，保留原 V1.0 主体）  
+**文档版本：** V1.2（W1-D5 P0 冻结基线，保留 V1.0/V1.1 主体及历史）
 **项目类型：** C++ 高级程序设计 / 软件工程综合实践项目  
 **项目方向：** C++、Drogon、智能调度、前后端分离、数据可视化  
 **适用对象：** 计算机科学与技术、软件工程等相关专业本科生  
 **项目周期：** 8～12 周  
-**文档状态：** 待冻结开发基线；第 44～56 章为新增可实施性约束及补充规范
+**文档状态：** P0 开发基线已冻结；第 44～56 章及 W1-D5 决策优先于前文冲突表述
 
 ---
 
@@ -125,9 +125,9 @@
 | 用户角色 | 主要职责 | 核心权限 |
 | --- | --- | --- |
 | 学生或教师 | 提交报修、查看进度、补充信息、确认完成、服务评价 | 仅访问本人提交或被授权查看的工单 |
-| 维修人员 | 接收任务、更新进度、填写处理结果、申请转派 | 访问分配给本人或所在班组的工单 |
+| 维修人员 | 接收任务、更新进度、填写处理结果、申请转派；可本人报修 | 访问当前/受控历史分配给本人及本人报修的工单 |
 | 调度管理员 | 审核工单、维护基础数据、确认或调整派单、处理异常 | 查看辖区工单并执行调度管理 |
-| 系统管理员 | 用户、角色、权限、参数、日志和系统配置管理 | 系统级管理权限 |
+| 系统管理员 | 系统身份；P0 业务访问须显式能力与数据范围授权 | 不天然拥有审核、派单、维修、验收等业务权限；通用管理后台为 P1 |
 
 权限控制采用基于角色的访问控制模型。后端必须对每个受保护接口进行身份认证和权限校验，前端菜单隐藏不能替代后端鉴权。
 
@@ -137,7 +137,7 @@
 
 ## 5.1 系统范围
 
-本项目包含：
+本项目总体愿景包含以下模块；P0/P1/P2 的实际边界以第 45 章为准：
 
 - 用户认证与角色权限；
 - 报修申请与附件上传；
@@ -204,13 +204,13 @@
         ↓
 系统生成调度推荐结果
         ↓
-管理员确认派单或人工调整
+管理员确认派单（可选择其他合格候选）
         ↓
 维修人员接单并开始处理
         ↓
 维修人员提交维修结果
         ↓
-报修人确认完成并评价
+报修人验收（可在关闭前评价）
         ↓
 工单关闭并进入统计分析
 ```
@@ -300,7 +300,7 @@
 
 ## 10.1 功能描述
 
-学生或教师通过统一表单提交故障信息。系统应提供必填校验、图片预览和草稿保存能力。
+学生或教师通过统一表单提交故障信息。P0 应提供必填校验、图片预览、后端 `DRAFT` 与显式提交；复杂草稿自动保存、版本恢复及独立草稿工作台属于 P1。
 
 ## 10.2 报修字段
 
@@ -320,14 +320,14 @@
 
 系统应支持：
 
-1. 新建并保存报修草稿；
+1. 新建后端草稿，并由用户显式提交；
 2. 提交报修并生成唯一工单编号；
 3. 上传、预览和删除附件；
 4. 校验字段长度、文件类型和文件大小；
 5. 自动记录报修人和提交时间；
 6. 在允许的状态下撤回或取消工单；
-7. 复制历史工单内容快速发起类似报修；
-8. 防止短时间内重复提交完全相同的工单。
+7. 复制历史工单内容快速发起类似报修（P1）；
+8. 短时间重复报修提醒（P1）；P0 仍通过版本和状态校验防止同一草稿重复提交。
 
 ## 10.4 工单编号
 
@@ -339,7 +339,7 @@ WX + 日期 + 当日流水号
 示例：WX202610100001
 ```
 
-编号必须全局唯一，生成过程应保证并发安全。
+编号必须全局唯一，生成过程应保证并发安全。P0 在草稿首次执行 `DRAFT → PENDING_REVIEW` 时于同一事务生成；草稿的 `order_no` 为 NULL，待补充再提交保留原编号。
 
 ---
 
@@ -563,7 +563,7 @@ WX + 日期 + 当日流水号
 | 服务评价 | 10% |
 | 紧急值班 | 5% |
 
-所有权重应支持管理员配置，权重之和应为 100%。系统应保存每次调度使用的权重快照，避免后续配置变化导致历史结果无法解释。
+P0 固定上述权重；动态配置属于 P1。推荐预览不写业务记录，确认派单时才保存最终重算后的权重与候选依据快照，避免历史结果无法解释。
 
 ## 14.6 工单优先级
 
@@ -596,7 +596,7 @@ WX + 日期 + 当日流水号
 {
   "worker_id": 18,
   "worker_name": "维修员A",
-  "total_score": 88.5,
+  "total_score": 90.5,
   "score_detail": {
     "skill": 95,
     "area": 100,
@@ -642,7 +642,7 @@ public:
 1. 明确提示无可用人员；
 2. 说明被排除的主要原因；
 3. 推荐责任班组或值班管理员；
-4. 允许经授权的管理员发起跨区域人工派单并填写原因；**P0 不允许突破资质要求或最大并行任务数**。超负载例外仅列为后续待论证需求，不得在初版直接放开；
+4. P0 可从系统返回的其他合格候选中人工选择，选择非 Top 3 必须填写原因；跨区域人员只有已满足区域硬约束时才可选择，且**不得突破资质或最大并行任务数**；
 5. 要求记录人工派单原因；
 6. 对紧急工单产生待升级提醒。
 
@@ -669,7 +669,7 @@ public:
 6. 填写维修措施和使用材料说明；
 7. 上传维修后图片；
 8. 提交完成结果；
-9. 发起转派、协助或延期申请。
+9. 发起转派申请；协助和延期申请属于 P1。
 
 拒单、转派和延期必须填写原因，并保留记录。
 
@@ -724,19 +724,11 @@ public:
 
 ## 17.2 服务评价
 
-评价内容包括：
-
-- 维修结果评分；
-- 响应速度评分；
-- 服务态度评分；
-- 文字评价；
-- 是否匿名展示。
-
-评分建议采用 1～5 分制。同一工单只能提交一次有效评价；如需修改，应由管理员按审计流程处理。
+P0 评价仅包含 `score`（1～5 的单项总评分）和可选 `comment`。同一工单只能提交一次有效评价，评价不改变 `COMPLETED` 状态；工单进入 `CLOSED` 后不接受新评价。多维评分、匿名展示、评价修改审批均属于 P1。
 
 ## 17.3 低分处理
 
-评价低于配置阈值时，系统应自动标记并进入管理员复核列表，以便进行回访或重新处理。
+低分自动复核属于 P1，不进入 P0 页面、接口或数据模型。
 
 ---
 
@@ -812,7 +804,7 @@ public:
 7. 删除工单时避免产生无引用垃圾文件；
 8. 在文件不存在时返回明确错误而不是导致服务异常。
 
-建议单张图片不超过 10 MB，单个工单最多上传 9 张图片，具体数值可由系统配置。**P0 限定每张不超过 5 MB、每工单最多 3 张；扩展版本再调整上限。**
+建议扩展版单张图片不超过 10 MB、单工单最多 9 张。**P0 对报修现场图 `REPORT` 与维修完成图 `REPAIR_RESULT` 分别限制最多 3 张，每张不超过 5 MiB，并分别校验数量、实际类型、大小和工单访问权限。**
 
 ---
 
@@ -930,10 +922,13 @@ GET    /api/work-orders/{id}/timeline
 GET    /api/work-orders/{id}/dispatch-candidates
 POST   /api/work-orders/{id}/assign
 POST   /api/work-orders/{id}/accept
-POST   /api/work-orders/{id}/progress
-POST   /api/work-orders/{id}/transfer-request
+POST   /api/work-orders/{id}/refuse
+POST   /api/work-orders/{id}/progress-events
+POST   /api/work-orders/{id}/transfer-requests
+POST   /api/work-orders/{id}/transfer-requests/{request_id}/decision
 POST   /api/work-orders/{id}/complete
 POST   /api/work-orders/{id}/verify
+POST   /api/work-orders/{id}/close
 ```
 
 ## 24.4 人员与技能接口
@@ -967,6 +962,8 @@ GET    /api/statistics/categories
 GET    /api/statistics/locations
 GET    /api/statistics/workers
 ```
+
+> 第 24 章保留资源分类示意；P0 实际只实现第 49.2 节冻结的 API-01～API-33。这里出现但未进入冻结清单的创建技能、复杂分类/位置统计等接口不属于 P0。
 
 ## 24.7 统一响应格式
 
@@ -1362,7 +1359,7 @@ CampusFix Backend
 
 ### 工单处理
 
-- 管理员能够审核、退回、派单和改派；
+- 管理员能够审核、退回、初次派单，并审批维修员发起的转派申请；
 - 维修人员能够接单、更新进度和提交结果；
 - 报修人能够验收和评价；
 - 工单状态流转符合规定。
@@ -1372,7 +1369,7 @@ CampusFix Backend
 - 系统能够根据技能、区域和工作量筛选候选人；
 - 系统能够计算综合得分并排序；
 - 管理员能够查看得分明细和推荐理由；
-- 管理员能够人工调整推荐结果并记录原因。
+- 管理员能够从其他合格候选中人工选择并记录非 Top 3 原因，但不能绕过硬约束。
 
 ### 统计与日志
 
@@ -1551,7 +1548,7 @@ CampusFix Backend
 
 ## 44.1 原始资料与不变项
 
-本稿以《选题.txt》和《校园维修工单与智能调度系统需求说明书》V1.0 为基线，**保留原定 Web 技术方案**：C++ 后端、Drogon、REST/JSON、Vue3、Element Plus、Axios、ECharts；课程开发从 SQLite 启动，支持后续替换数据库。四种逻辑角色不变：报修用户、维修人员、调度管理员、系统管理员。原说明书第 1～43 章保留为完整功能愿景，第 45～56 章补充实际实施约束。与原文发生细节冲突时，**以本次明确标注的 V1.1 开发规则为准**。
+本稿以《选题.txt》和《校园维修工单与智能调度系统需求说明书》V1.0 为基线，**保留原定 Web 技术方案**：C++ 后端、Drogon、REST/JSON、Vue3、Element Plus、Axios、ECharts；课程开发从 SQLite 启动，支持后续替换数据库。四种逻辑角色不变：报修用户、维修人员、调度管理员、系统管理员。原说明书第 1～43 章保留为完整功能愿景，第 45～56 章补充实际实施约束。与原文发生细节冲突时，**以 V1.2 第 44～56 章、`decisions.md` 的 W1-D5 已接受记录及配套冻结设计为准**。
 
 ## 44.2 改动性质
 
@@ -1565,10 +1562,10 @@ CampusFix Backend
 | 模块 | P0 必须交付（MVP） | P1 增强 | P2 扩展 |
 |---|---|---|---|
 | 用户/权限 | 四角色固定 RBAC、登录退出、接口鉴权、本人数据隔离 | 用户管理后台、登录限流优化 | 学校统一认证 |
-| 报修 | 报修创建/查询/详情、文字字段校验、最多 3 张图片 | 草稿、重复报修提醒、历史复制 | 图片 AI 故障分类 |
+| 报修 | 后端 DRAFT、显式提交、查询/详情、文字字段校验；报修现场图最多 3 张 | 复杂草稿 UI/自动保存/恢复、重复报修提醒、历史复制、管理员代报 | 图片 AI 故障分类 |
 | 工单 | 审核/退回、派单、接单、维修提交、验收、评价、关闭、日志 | 延期申请、批量处理、导出 | 多级审批、申诉 |
 | 基础数据 | 初始化区域与分类、管理员管理维修人员及技能/负载 | 分类及区域配置 UI、排班和值班 | 多校区复杂组织 |
-| 智能调度 | 硬过滤、评分、前三名推荐、理由、人工确认/改派 | 优先队列、权重配置、策略切换、可复现实验 | 全局组合优化、预测模型 |
+| 智能调度 | 硬过滤、固定权重评分、Top 3 与其他合格候选、理由、人工确认；维修员申请后审批转派 | 管理员无维修员申请时主动改派、优先队列、权重配置、策略切换、可复现实验 | 全局组合优化、预测模型 |
 | 统计 | 待办数量、类别分布、人员负载、完成率 | 时长/超时、区域热力、趋势图 | 导出复杂报表 |
 | 通知 | 页面状态和时间线反馈 | 站内通知与定时提醒 | 邮件、短信、微信 |
 | 工程 | 自动建库/种子数据、单元/接口/端到端测试、可复现启动 | Docker Compose、压力与长稳测试 | CI/CD、云端高可用 |
@@ -1593,16 +1590,16 @@ CampusFix Backend
 | PENDING_REVIEW | 审核通过 / 调度员 | PENDING_DISPATCH | 审核人、最终分类与紧急程度入库 |
 | PENDING_REVIEW | 退回补充 / 调度员 | PENDING_SUPPLEMENT | 必须填写具体退回原因 |
 | PENDING_SUPPLEMENT | 再提交 / 原报修人 | PENDING_REVIEW | 保留原工单号和修改历史 |
-| DRAFT、PENDING_REVIEW、PENDING_SUPPLEMENT | 取消 / 原报修人或授权管理员 | CANCELLED | 记录取消原因（草稿可直接删除属于 P1） |
+| DRAFT、PENDING_REVIEW、PENDING_SUPPLEMENT | 取消 / 原报修人或授权管理员 | CANCELLED | DRAFT 原因可选；已提交工单原因必填；不物理删除 |
 | PENDING_DISPATCH | 派单 / 调度员 | PENDING_ACCEPT | 负责人符合技能、区域、在岗及容量硬约束 |
 | PENDING_ACCEPT | 接单 / 当前维修员 | IN_PROGRESS | 只能本人接，记录接单时间 |
 | PENDING_ACCEPT | 拒单 / 当前维修员 | PENDING_DISPATCH | 必填原因，关闭当前有效派单记录 |
-| PENDING_ACCEPT、IN_PROGRESS | 申请转派 + 管理员审批 | PENDING_DISPATCH | 原派单结束、记录原因，再重新推荐 |
-| IN_PROGRESS | 提交维修结果 / 当前维修员 | PENDING_VERIFY | 完成说明必填，记录处理时间 |
-| PENDING_VERIFY | 验收通过 / 原报修人 | COMPLETED | 记录验收时间、操作人 |
+| PENDING_ACCEPT、IN_PROGRESS | 维修员申请转派 + 管理员批准 | PENDING_DISPATCH | 原派单结束、释放负载、记录原因，再重新推荐；无申请主动改派为 P1 |
+| IN_PROGRESS | 提交维修结果 / 当前维修员 | PENDING_VERIFY | 完成说明必填；记录该派单最终结果时间；未决转派申请同事务变为 SUPERSEDED |
+| PENDING_VERIFY | 验收通过 / 原报修人 | COMPLETED | 记录验收；有效派单以 COMPLETED 结束并在同一事务释放负载 |
 | PENDING_VERIFY | 验收不通过 / 原报修人 | IN_PROGRESS | 说明原因，返工计数 +1，保留当前负责人 |
 | COMPLETED | 评价 / 原报修人 | COMPLETED | 一张工单仅一次有效评价 |
-| COMPLETED | 归档关闭 / 调度员（可在评价后） | CLOSED | 记录关闭人和关闭时间 |
+| COMPLETED | 归档关闭 / 授权调度管理员 | CLOSED | 记录关闭人和关闭时间；评价不是前置条件 |
 | PENDING_DISPATCH | 取消 / 调度员 | CANCELLED | 必须说明原因 |
 
 **禁止**：客户端任意提交目标状态；跨越中间状态；对 CLOSED/CANCELLED 修改主体数据；重复接单、重复派单、重复评价。所有转换在服务层集中校验并以事务持久化。审核/派单/关闭等受保护操作须检查角色及数据范围。流程中“补充材料”只能由原报修人操作。
@@ -1613,7 +1610,7 @@ CampusFix Backend
 2. **维修人员拒单**：记录拒单理由、失效原分配、释放负载、回到待派单，不自动跳过审核。
 3. **同一工单重复派单**：只有一次分配成功；后到请求返回业务冲突；数据库保持唯一有效负责人。
 4. **验收不通过**：工单返工、保留前次结果与原因；不得覆盖历史时间线。
-5. **管理员改派**：需要理由；即使推荐对象得分更低仍可操作，但 P0 不允许绕过资质或容量硬约束。
+5. **人工选择与改派**：初次派单可选择其他合格人员，选择非 Top 3 时理由必填；P0 改派仅审批维修员申请，管理员无申请主动改派属于 P1；任何路径都不得绕过硬约束。
 
 ## 46.4 自动验收与紧急故障
 
@@ -1623,45 +1620,32 @@ P0 **不设置超时自动验收**，否则可能将未修复故障错误标记�
 
 | 功能 | 报修人 | 维修人员 | 调度管理员 | 系统管理员 |
 |---|---|---|---|---|
-| 新建报修 | 本人 | 可作为报修人创建本人单 | 按授权可代报 | 可管理 |
-| 查看工单 | 本人工单 | 当前分配/历史授权工单 | 管辖区域全部 | 全部 |
-| 审核、派单、改派 | 否 | 否 | 授权区域 | 授权管理 |
+| 新建报修 | 本人 | 可作为报修人创建本人单 | 否（代报为 P1） | 否（代报为 P1） |
+| 查看工单 | 本人工单 | 当前分配/历史授权工单及本人报修 | 管辖区域全部 | 仅显式 `BUSINESS_READ` 与数据范围 |
+| 审核、派单、审批转派 | 否 | 否 | 授权区域 | 仅显式 `REVIEW`/`DISPATCH` 与数据范围 |
 | 接单、维修提交 | 否 | 当前有效负责人 | 否（不可冒名） | 否（审计功能另行设计） |
 | 验收、评价 | 原报修人 | 否 | 否（不能代评价） | 否 |
-| 维修人员与技能维护 | 否 | 只读本人 | 负责区域 | 全部 |
-| 查看内部调度原因/审计日志 | 否 | 限本人任务公开信息 | 管辖区域 | 全部 |
-| 管理账户/系统配置 | 否 | 否 | 否 | 是 |
+| 维修人员与技能维护 | 否 | 只读本人 | 负责区域 | 仅显式 `WORKER_MANAGE` 与数据范围 |
+| 查看内部调度原因/审计日志 | 否 | 限本人任务公开信息 | 管辖区域 | 仅显式 `INTERNAL_NOTE_READ` 与业务读取范围 |
+| 管理账户/系统配置 | 否 | 否 | 否 | P0 不提供通用管理 UI/API |
 
-权限必须在后端校验，包括工单详情、附件下载、评价、时间线、导出和统计；前端隐藏按钮仅为体验优化。演示用户账户使用模拟数据，不使用真实学生联系方式。
+权限必须在后端校验，包括工单详情、附件下载、评价、时间线和统计；前端隐藏按钮仅为体验优化。每账户 P0 只有一个主要角色，`sysadmin` 不能凭角色绕过审核、派单、维修或验收规则。管理能力码固定为 `BUSINESS_READ/REVIEW/DISPATCH/CANCEL/CLOSE/WORKER_MANAGE/STATS_VIEW/INTERNAL_NOTE_READ`；dispatcher 以 `AREA_SCOPE` 表达管辖区域，sysadmin 的动作能力记录以自身 `scope_location_id` 表达区域，NULL 才表示该能力全局。演示账户使用模拟数据，不使用真实学生联系方式。
 
 # 48. 数据模型与一致性约束（新增）
 
 ## 48.1 P0 表清单
 
-| 表 | 必要字段（建议） | 核心约束 |
-|---|---|---|
-| `users` | id, username, password_hash, role, status, created_at | 用户名唯一；密码安全哈希 |
-| `auth_sessions` | id, user_id, token_hash, expires_at, revoked_at | 服务端 Token 能够真正撤销 |
-| `workers` | id, user_id, service_area_id, availability, max_concurrent_tasks | 每个有效维修账号对应一份人员档案 |
-| `skills` | id, code, name, requires_certificate | skill code 唯一 |
-| `worker_skills` | worker_id, skill_id, level, certified | 组合键唯一；level 在 1～5 |
-| `fault_categories` | id, name, required_skill_id, default_priority | 类别映射技能 |
-| `locations` | id, parent_id, name, location_type | 存储楼宇层级；位置不做硬删除 |
-| `work_orders` | id, order_no, reporter_id, category_id, location_id, description, requested_urgency, approved_urgency, status, version, created_at, updated_at | 单号唯一、外键有效、version 乐观锁 |
-| `attachments` | id, order_id, uploader_id, stored_path, mime, size, created_at | 访问必须继承工单权限 |
-| `assignments` | id, order_id, worker_id, assigned_by, assigned_at, ended_at, end_reason | 同一工单同时最多一个有效分配 |
-| `status_logs` | id, order_id, actor_id, action, from_status, to_status, note, created_at | 只追加，禁止任意覆盖 |
-| `dispatch_records` | id, order_id, strategy, weights_json, candidates_json, created_at | 保存推荐依据/权重快照 |
-| `evaluations` | id, order_id, reporter_id, score, comment, created_at | 单工单一次有效评价；评分 1～5 |
+P0 固定 16 张表：`users`、`auth_sessions`、`management_grants`、`locations`、`skills`、`fault_categories`、`workers`、`worker_skills`、`order_number_sequences`、`work_orders`、`attachments`、`assignments`、`transfer_requests`、`status_logs`、`dispatch_records`、`evaluations`。完整字段、类型、外键、删除策略和索引以 `database-design.md` 为唯一物理设计基线。
 
-P1 再增加 `notifications`、`worker_schedules`、`dispatch_score_details`、`operation_logs` 等表。表名最终可遵循统一命名规范，不能在 SQL 和代码中混用原文 `user`/`work_order` 与本章的复数命名；本项目推荐统一采用上表名称。
+关键约束包括：用户名与 Token 哈希唯一；管理能力码受枚举检查；`fault_categories.target_completion_minutes > 0`；草稿单号可空、正式单号唯一；同工单最多一个 `ended_at IS NULL` 的有效派单；到场日志对每个 `assignment_id` 最多一条；每单一次评价；报修与维修结果附件分别最多 3 张（服务层计数并在事务内校验）。P1 再增加通知、排班和动态策略配置等模型。
 
 ## 48.2 一致性与事务
 
-- **生成单号**：`WXYYYYMMDDNNNN`；在数据库事务内更新“日期流水号”，创建唯一索引，冲突时重试或返回明确错误；禁止简单“先查最大号再加 1”的非事务并发方式。
-- **派单**：检查工单状态及 `version`、人员当前可接单能力，新增派单记录、更新工单、写入日志在同一事务完成；失败全部回滚。
+- **生成单号**：`WXYYYYMMDDNNNN`；首次提交时在事务内更新 `order_number_sequences` 并创建唯一编号；禁止简单“先查最大号再加 1”。
+- **派单**：使用短 `BEGIN IMMEDIATE`，重新读取工单版本、人员硬约束和实时负载，重算排名并新增派单、最终调度快照、更新工单和写日志；失败全部回滚。
 - **负载**：P0 使用数据库查询未结束有效任务数，不采用可能失真的前端缓存值作为唯一判断依据。人员容量在事务中再次核查。
 - **SQLite 并发**：开启外键约束，设置合理 `busy_timeout`；按需要开启 WAL；读写事务边界必须清楚。不要把 SQLite 当作高并发生产数据库。
+- **验收/转派**：验收通过结束有效派单并释放负载；维修提交使未决转派申请 `SUPERSEDED`；相关状态、日志和派单/申请更新必须同事务提交。
 - **评价**：为每工单唯一有效评价添加数据库唯一约束并在应用层处理重复请求。
 - **删除**：工单和状态日志禁止物理删除；附件可执行受控逻辑删除或延迟清理。
 
@@ -1690,24 +1674,40 @@ Base URL：`/api`；JSON 使用 UTF-8，HTTP 状态码与业务码同时使用�
 | 编号 | API | 核心请求/响应、验收 |
 |---|---|---|
 | API-01 | `POST /api/auth/login` | username/password → token、role；密码错误安全返回 |
-| API-02 | `POST /api/auth/logout` / `GET /api/auth/me` | 撤销当前会话 / 查询本人的角色与显示信息 |
-| API-03 | `POST /api/work-orders` | category_id、location_id、title、description、requested_urgency；服务端记录本人 |
-| API-04 | `GET /api/work-orders` | 分页；按角色限制结果行；status/category 筛选 |
-| API-05 | `GET /api/work-orders/{id}` | 工单详情、当前负责人、公开时间线、受控附件 |
-| API-06 | `POST /api/work-orders/{id}/submit` | 草稿或待补充提交；非法状态 409 |
-| API-07 | `POST /api/work-orders/{id}/review` | action=approve/return/reject、reason；调度管理员授权 |
-| API-08 | `GET /api/work-orders/{id}/dispatch-candidates` | top 3、综合得分、分项得分、排除原因；只读、**不派单** |
-| API-09 | `POST /api/work-orders/{id}/assign` | worker_id、reason、expected_version；同事务派单 |
-| API-10 | `POST /api/work-orders/{id}/accept` | 当前负责人接单；拒单/转派另设操作 action |
-| API-11 | `POST /api/work-orders/{id}/complete` | repair_summary 必填；进待验收 |
-| API-12 | `POST /api/work-orders/{id}/verify` | approved=true/false、reason；若拒绝则返工 |
-| API-13 | `POST /api/work-orders/{id}/evaluations` | score 1～5，单工单唯一 |
-| API-14 | `GET /api/workers` / `PUT /api/workers/{id}` | 列表、技能、在岗及容量维护 |
-| API-15 | `GET /api/dashboard/summary` | 按授权范围统计待审核、待派单、处理中、已完成 |
-| API-16 | `GET /api/work-orders/{id}/timeline` | 只返回对该角色可见的操作历史 |
-| API-17 | `POST /api/files/upload` / `GET /api/files/{id}` | 图片上传权限、MIME 与大小、授权下载 |
+| API-02 | `POST /api/auth/logout` | 撤销当前会话 |
+| API-03 | `GET /api/auth/me` | 查询本人角色、显示信息和管理授权摘要 |
+| API-04 | `GET /api/locations` | 已登录用户获取位置选项 |
+| API-05 | `GET /api/fault-categories` | 已登录用户获取类别与目标时长选项 |
+| API-06 | `POST /api/work-orders` | 创建本人 `DRAFT`；服务端确定 reporter_id |
+| API-07 | `PUT /api/work-orders/{id}` | 原报修人编辑 DRAFT/PENDING_SUPPLEMENT |
+| API-08 | `POST /api/work-orders/{id}/submit` | 首次提交生成编号；非法状态/版本 409 |
+| API-09 | `GET /api/work-orders` | 按角色与范围分页筛选 |
+| API-10 | `GET /api/work-orders/{id}` | 详情、当前负责人、受控附件摘要 |
+| API-11 | `GET /api/work-orders/{id}/timeline` | 按公共/管理白名单返回历史 |
+| API-12 | `POST /api/work-orders/{id}/cancel` | 草稿原因可选，已提交原因必填 |
+| API-13 | `POST /api/work-orders/{id}/review` | approve/return/reject；授权区域审核 |
+| API-14 | `GET /api/workers` | 授权管理人员列表；worker 只读本人 |
+| API-15 | `GET /api/workers/{id}/workload` | 实时有效派单负载 |
+| API-16 | `PUT /api/workers/{id}` | 技能、资格、在岗、区域和容量维护 |
+| API-17 | `GET /api/work-orders/{id}/dispatch-candidates` | Top 3、其他合格候选、分项得分和排除摘要；严格只读 |
+| API-18 | `POST /api/work-orders/{id}/assign` | 重算并原子保存最终快照/派单；冲突 409 |
+| API-19 | `POST /api/work-orders/{id}/accept` | 当前负责人接单 |
+| API-20 | `POST /api/work-orders/{id}/refuse` | 当前负责人带原因拒单 |
+| API-21 | `POST /api/work-orders/{id}/transfer-requests` | 当前负责人申请转派 |
+| API-22 | `POST /api/work-orders/{id}/transfer-requests/{request_id}/decision` | 授权管理员批准/拒绝申请；无申请主动改派不在 P0 |
+| API-23 | `POST /api/work-orders/{id}/complete` | 提交结果并取代未决转派申请 |
+| API-24 | `POST /api/work-orders/{id}/verify` | 验收通过释放负载；不通过返工 |
+| API-25 | `POST /api/work-orders/{id}/evaluations` | score 1～5、可选 comment；每单一次 |
+| API-26 | `GET /api/work-orders/{id}/evaluations` | 按工单权限查询评价 |
+| API-27 | `POST /api/work-orders/{id}/close` | 可不经评价关闭 COMPLETED |
+| API-28 | `POST /api/files/upload` | REPORT/REPAIR_RESULT 分别最多 3 张、每张 ≤5 MiB |
+| API-29 | `GET /api/files/{id}` | 继承工单范围授权下载 |
+| API-30 | `DELETE /api/files/{id}` | 上传者在可编辑阶段删除 |
+| API-31 | `GET /api/dashboard/summary` | 授权范围内看板摘要 |
+| API-32 | `GET /api/statistics/work-orders` | 固定 submitted_at 队列口径的基础统计 |
+| API-33 | `POST /api/work-orders/{id}/progress-events` | 当前负责人追加 ARRIVED/PROGRESS_NOTE；状态不变 |
 
-`review` 的 reject 应映射到 CANCELLED 并记录无效原因；`refuse`、`transfer-request`、`close` 和 `cancel` 等操作沿用第 24 章的资源风格追加独立路由，并在接口设计文件中逐一写明请求体、响应、错误码、权限、状态前后条件。API 文档不得只列 URL，要给最少一个正常与错误例子。
+API-01～API-33 的详细 DTO、权限、数据库效果、正常/失败示例与测试引用以 `api-contract.md` 为准。第 24 章是资源概览；若编号或字段冲突，以本节冻结编号为准。
 
 # 50. 智能调度的可检验算法规范（新增）
 
@@ -1730,7 +1730,8 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 - 技能评分：所需技能熟练度为 1～5，可采用 `level/5 * 100`；未取得必需资质者在过滤阶段剔除。
 - 区域评分：同楼宇 100、同校区其他楼宇 70、获准跨区 30；P0 不依赖真实地图距离。
 - 负载评分：`100 * (1 - active_tasks / max_tasks)`，裁剪到 `[0,100]`；`max_tasks<=0` 视为不可用。
-- 历史效率与评价：样本不足时统一使用中性分 60（示例默认值），不能直接将新员工打成 0 分；记录样本量并标记“数据不足”。
+- 历史效率：有效样本为该维修员最近 20 个以 `COMPLETED` 正常结束、具有 `accepted_at` 和最终 `result_submitted_at` 的派单。`actual_minutes=max(1, accepted_at 到最终结果提交的分钟数)`；单样本 `efficiency_sample=clamp(100×fault_categories.target_completion_minutes/actual_minutes,0,100)`。有效样本少于 3 个取 60，否则取算术平均并四舍五入到 1 位小数。返工时使用最后一次结果提交时间，全部尝试仍由日志保留。
+- 服务评价：取该维修员最终完成工单最近 20 条有效评价，单项 1～5 星先以 `score×20` 映射到 0～100；有效样本少于 3 个取 60，否则取算术平均并四舍五入到 1 位小数。
 - 紧急值班：紧急工单且人员为值班者记 100；否则记 0。普通工单也可保持该权重项为 0，所有人的分数可比。
 - 同分排序：按负载更低 → 人员编号升序，保证结果可复现。
 
@@ -1738,7 +1739,7 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 
 ## 50.4 推荐结果契约
 
-包含候选 worker_id、total_score、score_detail、理由和 risks；无候选时返回 `candidates:[]` 与按原因分组的 excluded_summary。推荐动作只计算，不修改工单。管理员“确认派单”才执行事务和状态变更。
+返回 `top_candidates`（最多 3 人）、`other_eligible_candidates`、分项分、理由、风险、样本量和 `excluded_summary`。推荐动作只计算，不修改工单且不写 `dispatch_records`。管理员确认派单时重新计算硬约束、负载与排名；选择非 Top 3 时理由必填，并在同一事务保存最终推荐依据/权重快照、选中人员、派单、状态和日志。
 
 ## 50.5 可比较的实验
 
@@ -1751,10 +1752,10 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 | `/login` | 登录、身份切换到对应工作台 | 密码错误、禁用用户、网络失败 |
 | `/report/new` | 表单与图片上传、提交成功跳详情 | 必填缺失、图片超限、重复点击 |
 | `/my-orders` | 本人工单列表、状态筛选 | 空列表、分页为空 |
-| `/orders/:id` | 详情、时间线、按角色显示验收/操作 | 无权限、已取消、状态冲突 |
-| `/worker/tasks` | 待接单、处理中、接单/提交结果 | 任务被改派、重复接单 |
+| `/orders/:id` | 详情、时间线、按角色显示验收/评价/操作 | 无权限、已取消、状态冲突 |
+| `/worker/tasks` | 待接单、处理中、接单、到场/进度、提交结果 | 任务被转派、重复接单/到场 |
 | `/admin/orders` | 待审核、待派单、批注、关闭 | 并发状态变化、退回原因为空 |
-| `/admin/dispatch/:id` | 候选前三、评分明细、派单确认/改派 | 无候选、人员不可用 |
+| `/admin/dispatch/:id` | Top 3、其他合格候选、评分明细、初次派单、转派申请审批 | 无候选、人员不可用、无申请主动改派不可用 |
 | `/admin/workers` | 人员技能、状态、最大负载维护 | 无效负载、缺少技能 |
 | `/admin/dashboard` | 状态总览、类别分布、负载对比 | 数据为空、后端故障 |
 
@@ -1767,7 +1768,7 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 | 功能 | 关键主流程与 5 类异常流程均完成测试 | 更多跨模块场景 |
 | 鉴权 | 全部受保护 API 做服务端角色/资源范围校验 | 权限自动化测试覆盖率提高 |
 | 数据 | 工单、有效派单、日志、评价不发生冲突和丢失 | 容灾备份演练 |
-| 上传 | 3 张、每张 ≤5 MB；图片类型及权限校验 | 9 张、每张 ≤10 MB |
+| 上传 | REPORT 与 REPAIR_RESULT 分别最多 3 张、每张 ≤5 MiB；分别校验数量、类型及权限 | 合计/分类上限可配置 |
 | 速度 | 在指定测试机记录接口与页面耗时，阻断明显慢查询 | 参考第 31 章的 P95、并发及吞吐目标 |
 | 可靠性 | 重启后数据仍在、关键失败事务回滚 | 8 小时连续运行与压力测试 |
 | 安全 | 安全密码哈希、限权下载、参数化查询、Token 过期/撤销 | 限流、更多攻击面测试 |
@@ -1782,10 +1783,10 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 | FR-001 | 登录、退出、会话失效 | P0 | AuthService / Login | TC-AUTH-01～04 |
 | FR-002 | 后端角色与资源鉴权 | P0 | AuthMiddleware | TC-SEC-01～05 |
 | FR-003 | 创建和提交工单 | P0 | WorkOrderService / ReportForm | TC-ORDER-01～03 |
-| FR-004 | 工单列表/详情/时间线 | P0 | OrderRepository / OrderDetail | TC-ORDER-04～06 |
+| FR-004 | 工单列表/详情/时间线 | P0 | OrderRepository / OrderDetail | TC-ORDER-04～06、TC-PROG-01～03 |
 | FR-005 | 审核与退回补充 | P0 | WorkOrderService / AdminOrders | TC-WF-01～03 |
 | FR-006 | 维修人员技能及负载管理 | P0 | WorkerService / AdminWorkers | TC-WORKER-01～03 |
-| FR-007 | 调度筛选与推荐得分 | P0 | DispatchService / DispatchPage | TC-DSP-01～08 |
+| FR-007 | 调度筛选与推荐得分 | P0 | DispatchService / DispatchPage | TC-DSP-01～10 |
 | FR-008 | 派单、接单、拒单和转派 | P0 | AssignmentService | TC-WF-04～09 |
 | FR-009 | 维修提交、返工和验收 | P0 | WorkOrderService | TC-WF-10～13 |
 | FR-010 | 评价、关闭与不可变历史 | P0 | EvaluationService | TC-WF-14～16 |
@@ -1821,17 +1822,19 @@ P0 不依赖机器学习训练，也不依赖外部付费 AI API；核心算法�
 - 编码先写边界测试，再修改实现；调度算法用固定种子数据检验相同输入返回稳定结果。
 - `docs/decisions.md` 记录每次架构与需求决策：问题、选项、最终选择、原因、影响。
 
-# 56. 需求冻结前的开放问题与默认决策（新增）
+# 56. W1-D5 冻结决定与外部前置条件
 
 | 问题 | V1.1 默认决策 | 何时复核 |
 |---|---|---|
 | 课程必须 Qt 还是可用 Web？ | 依据本人选题沿用 Drogon + Vue Web | 第 1 周与教师确认 |
 | 数据库是 SQLite 还是 MySQL？ | SQLite 用于单机演示开发；不承诺生产级并发 | 第 1 周 |
-| 四个角色是否都要独立界面？ | 四种权限；管理员可复用 UI 布局，逻辑角色不合并 | 原型评审 |
+| 四个角色是否都要独立界面？ | 四种权限、单一主要角色；布局可复用，逻辑角色不合并；worker 可本人报修 | 已冻结 |
 | Token 实现 | P0 推荐随机服务端会话 Token，并存哈希以支持失效/退出；避免裸明文 Token 入库 | 认证模块开发前 |
-| 维修人员是否可超负载派单？ | P0 禁止；例外审批待需求评审 | 调度模块开发前 |
+| 维修人员是否可超负载派单？ | P0 禁止，不设置例外审批 | 已冻结 |
 | 是否必须自动接单/自动验收？ | 均不实现；人工接单、人工验收 | 开发中期评审 |
 | 是否要求实测 100 并发与 Docker？ | P1 目标，优先 P0 完整闭环 | 第 8 周 |
 | 是否真实连接学校平台？ | 不连接，使用模拟用户、校区与工单 | 始终不纳入课程版 |
 
-**V1.1 最终门槛**：上述缺口即使尚未逐一和老师确认，也按“默认决策”形成可开发版本；任何修改必须升级版本号，更新需求追踪表和测试用例，而不是口头更改。
+冻结补充：P0 保留 DRAFT 与显式提交；允许未评价关闭；评价关闭后不可新增；sysadmin 业务能力显式授权；管理员主动改派为 P1；报修图与维修结果图各最多 3 张；推荐预览只读，确认派单保存最终快照；验收释放负载和转派申请 `SUPERSEDED` 更新均须事务一致。
+
+**V1.2 最终门槛**：本文件与 `requirements-trace.md`、`decisions.md`、`flows.md`、`roles.md`、`database-design.md`、`api-contract.md`、`ui-wireframes.md`、`architecture.md` 共同构成 P0 开发基线。任何范围或语义修改必须新增决策记录并同步受影响的数据库、API、UI 与测试，不得口头更改。

@@ -1,6 +1,6 @@
-# CampusFix REST API 契约（W1-D4）
+# CampusFix REST API 契约
 
-> **版本**：V0.1（W1-D4 设计稿，W1-D5 评审后冻结）
+> **版本**：V1.0（W1-D5 P0 冻结基线）
 >
 > **范围**：13 项 P0 的 HTTP 契约；本文是设计，不表示接口或测试已经实现。
 > **依据**：`docs/SRS.md` 第 45～56 章、`docs/requirements-trace.md`、`docs/flows.md`、`docs/roles.md`、`docs/database-design.md`。
@@ -47,10 +47,11 @@
 | 409 | `ORDER_STATUS_CONFLICT` | 当前状态不允许该动作 |
 | 409 | `ORDER_VERSION_CONFLICT` | `expected_version` 已过期 |
 | 409 | `ACTIVE_ASSIGNMENT_CONFLICT` | 已存在有效派单；重复/并发派单 |
+| 409 | `WORKER_CAPACITY_CONFLICT` | 派单事务中容量已被并发请求占用 |
 | 409 | `DUPLICATE_OPERATION` | 重复提交、待处理转派或重复评价 |
 | 422 | `VALIDATION_ERROR` | 字段缺失、长度/范围/格式不合法 |
 | 422 | `WORKER_INELIGIBLE` | 技能、资质、在岗、区域或容量硬约束不满足 |
-| 413 | `FILE_TOO_LARGE` | 单文件超过 5 MB |
+| 413 | `FILE_TOO_LARGE` | 单文件超过 5 MiB |
 | 415 | `UNSUPPORTED_FILE_TYPE` | 扩展名或实际 MIME 不允许 |
 | 429 | `RATE_LIMITED` | 关键接口请求过快 |
 | 500 | `INTERNAL_ERROR` | 服务异常；只返回 `request_id`，不暴露堆栈 |
@@ -81,10 +82,10 @@
 区域内 dispatcher，或同时具备业务范围与 `INTERNAL_NOTE_READ` 明确授权的 sysadmin，事件才可额外返回：
 
 ```json
-{"internal_note":"疑似重复报修，已电话核验","metadata":{"selected_worker_id":18,"manual_adjustment_reason":"同楼值班"}}
+{"internal_note":"疑似重复报修，已电话核验","management_detail":{"assignment_id":501,"worker_id":18,"assign_reason":"同楼值班","candidate_rank":4}}
 ```
 
-禁止返回 `password_hash`、`token_hash`、`stored_path`、原始 `metadata_json` 中未列入 DTO 白名单的键、其他用户私人联系方式、未授权完整候选评分。后端必须构造角色专用 DTO，不能先发完整对象再让前端隐藏。
+管理扩展仅可按事件返回适用字段：审核类 `review_action/category_id/approved_urgency`；派单类 `assignment_id/worker_id/assign_reason/candidate_rank`；转派类 `transfer_request_id/decision`；返工类 `rework_count`。禁止返回 `password_hash`、`token_hash`、`stored_path`、原始 `metadata_json`、其他用户私人联系方式、未授权完整候选评分。后端必须构造角色专用 DTO，不能先发完整对象再让前端隐藏。
 
 ## 3. P0 端点总表
 
@@ -122,6 +123,7 @@
 | API-30 | `DELETE /api/files/{id}` | FR-011 | 上传者且处于可编辑阶段 | 无 |
 | API-31 | `GET /api/dashboard/summary` | FR-012 | 授权管理人员 | 无 |
 | API-32 | `GET /api/statistics/work-orders` | FR-012 | 授权管理人员 | 无 |
+| API-33 | `POST /api/work-orders/{id}/progress-events` | FR-004、FR-009 | 当前负责人 | E-01/E-02，状态不变 |
 
 位置和分类只读端点是创建工单的必要基础数据，不提供 P0 管理 CRUD。系统账号/授权后台属于 P1；P0 的显式授权由受控初始化数据建立。
 
@@ -208,7 +210,7 @@
 - **请求**：`GET /api/work-orders/{id}/timeline?page=1&page_size=50`；按工单范围；FR-002、FR-004、FR-010，`TC-ORDER-05`、`TC-ORDER-06`、`RBAC-D3-10`、`RBAC-D3-12`。
 - **成功 200**：`{"code":0,"message":"success","data":{"items":[{"id":91,"action":"ORDER_SUBMITTED","from_status":"DRAFT","to_status":"PENDING_REVIEW","public_note":null,"actor":{"id":12,"display_name":"李同学"},"created_at":"2026-10-19T09:05:00.000Z"}],"page":1,"page_size":50,"total":1},"request_id":"req_11"}`。
 - **失败示例 404**：`{"code":"RESOURCE_NOT_FOUND","message":"工单不存在","data":null,"request_id":"req_11"}`。
-- **DB**：只读 `status_logs`；区域内 dispatcher 可获得管理字段白名单；sysadmin 仅在有 `INTERNAL_NOTE_READ` 且范围匹配时获得 `internal_note/metadata` 白名单。
+- **DB**：只读 `status_logs`；区域内 dispatcher 可获得管理字段白名单；sysadmin 仅在有 `INTERNAL_NOTE_READ` 且范围匹配时获得 `internal_note/management_detail` 白名单。
 
 ### API-12 取消工单
 
@@ -252,11 +254,12 @@
 
 ### API-17 推荐候选
 
-- **请求**：`GET /api/work-orders/{id}/dispatch-candidates`；授权区域 dispatcher，或具备 `DISPATCH` 及相应范围的 sysadmin；FR-007，`TC-DSP-01～08`、`WF-D3-04`、`WF-D3-13`。sysadmin 若还需查看历史内部备注，另需 `INTERNAL_NOTE_READ`。
-- **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"order_version":3,"strategy":"WEIGHTED_SCORE_V1","weights":{"skill":0.35,"area":0.20,"load":0.20,"efficiency":0.10,"rating":0.10,"duty":0.05},"candidates":[{"worker_id":18,"worker_name":"维修员A","total_score":88.5,"active_tasks":1,"max_concurrent_tasks":3,"score_detail":{"skill":100,"area":100,"load":66.7,"efficiency":60,"rating":60,"duty":0},"reason":"技能与区域匹配，仍有容量","risks":["历史样本不足"]}],"excluded_summary":{"AT_CAPACITY":2}},"request_id":"req_17"}`。
-- **无候选仍为 200**：`data.candidates=[]` 且给出 `excluded_summary`；不是错误。
+- **请求**：`GET /api/work-orders/{id}/dispatch-candidates`；授权区域 dispatcher，或具备 `DISPATCH` 及相应范围的 sysadmin；FR-007，`TC-DSP-01～10`、`WF-D3-04`、`WF-D3-13`。sysadmin 若还需查看历史内部备注，另需 `INTERNAL_NOTE_READ`。
+- **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"order_version":3,"strategy":"WEIGHTED_SCORE_V1","weights":{"skill":0.35,"area":0.20,"load":0.20,"efficiency":0.10,"rating":0.10,"duty":0.05},"top_candidates":[{"rank":1,"worker_id":18,"worker_name":"维修员A","total_score":80.3,"active_tasks":1,"max_concurrent_tasks":3,"score_detail":{"skill":100,"area":100,"load":66.7,"efficiency":60,"rating":60,"duty":0},"sample_counts":{"efficiency":2,"rating":1},"reason":"技能与区域匹配，仍有容量","risks":["历史样本不足"]}],"other_eligible_candidates":[{"rank":4,"worker_id":25,"worker_name":"维修员D","total_score":74.0,"active_tasks":0,"max_concurrent_tasks":2,"score_detail":{"skill":80,"area":70,"load":100,"efficiency":60,"rating":60,"duty":0},"sample_counts":{"efficiency":1,"rating":0},"reason":"满足全部硬约束","risks":["历史样本不足"]}],"excluded_summary":{"AT_CAPACITY":2}},"request_id":"req_17"}`。
+- **候选 DTO**：两个候选数组均使用 `rank,worker_id,worker_name,total_score,active_tasks,max_concurrent_tasks,score_detail,sample_counts,reason,risks`。`other_eligible_candidates` 按同一排序规则返回第 4 名起的全部合格人员，P0 数据量无需另做分页。
+- **无候选仍为 200**：`top_candidates=[]`、`other_eligible_candidates=[]` 且给出 `excluded_summary`；不是错误。
 - **失败示例 409**：`{"code":"ORDER_STATUS_CONFLICT","message":"仅待派单工单可计算推荐","data":{"current_status":"PENDING_ACCEPT"},"request_id":"req_17"}`。
-- **状态/DB**：`PENDING_DISPATCH → PENDING_DISPATCH`；评分纯计算，不创建派单。允许写一条 `dispatch_records` 快照；记录失败不应把推荐误认为派单成功。P0 使用固定权重，排班过滤不启用。
+- **状态/DB**：`PENDING_DISPATCH → PENDING_DISPATCH`；评分与读取严格只读，不创建派单、不写 `dispatch_records` 或状态日志。效率采用最近 20 个正常完成派单及 `target_completion_minutes/accepted_at/result_submitted_at` 冻结公式，评价采用最近 20 条最终完成人员评价；各自样本少于 3 取 60。P0 使用固定权重，排班过滤不启用。
 
 ### API-18 确认派单
 
@@ -265,7 +268,7 @@
 - **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"assignment_id":501,"worker":{"id":18,"display_name":"维修员A"},"status":"PENDING_ACCEPT","version":4},"request_id":"req_18"}`。
 - **失败示例 409**：`{"code":"ACTIVE_ASSIGNMENT_CONFLICT","message":"工单已被其他请求派单","data":{"current_status":"PENDING_ACCEPT"},"request_id":"req_18"}`。
 - **失败示例 422**：`{"code":"WORKER_INELIGIBLE","message":"维修人员任务量已满","data":{"reason":"AT_CAPACITY"},"request_id":"req_18"}`。
-- **状态/DB**：`PENDING_DISPATCH → PENDING_ACCEPT`；事务内重查状态/version、技能/资质/区域/可用性/实时容量，插入 `assignments`、条件更新工单、写日志。部分唯一索引冲突统一映射为 409；绝不产生第二条有效派单。
+- **状态/DB**：`PENDING_DISPATCH → PENDING_ACCEPT`；短 `BEGIN IMMEDIATE` 事务内重查状态/version、技能/资质/区域/可用性/实时容量并重新计算最终排名；校验非 Top 3 理由，插入 `assignments` 与绑定该派单的 `dispatch_records` 最终权重/候选/选中人员快照，条件更新工单并写日志。部分唯一索引或容量竞争统一映射为 409；绝不产生第二条有效派单或突破最后一个容量。
 
 ## 7. 接单、拒单、转派、维修与验收
 
@@ -283,13 +286,13 @@
 - **请求体**：`reason` 1～500、`expected_version` 必填。
 - **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"status":"PENDING_DISPATCH","version":5,"assignment_ended":true},"request_id":"req_20"}`。
 - **失败示例 422**：`{"code":"VALIDATION_ERROR","message":"拒单原因必填","data":{"field":"reason"},"request_id":"req_20"}`。
-- **状态/DB**：`PENDING_ACCEPT → PENDING_DISPATCH`；同事务结束有效派单（`end_reason=REFUSED`）、条件更新工单并写日志，实时负载随之释放。
+- **状态/DB**：`PENDING_ACCEPT → PENDING_DISPATCH`；同事务结束有效派单（`end_reason=REFUSED`）、将该派单仍为 PENDING 的转派申请标为 `SUPERSEDED`、条件更新工单并写日志，实时负载随之释放。
 
 ### API-21 申请转派
 
 - **请求**：`POST /api/work-orders/{id}/transfer-requests`；仅当前有效负责人；FR-008，`TC-WF-08`、`WF-D3-08`、`WF-D3-09`。
 - **请求体**：`reason` 1～500、`expected_version` 必填。
-- **成功 201**：`{"code":0,"message":"success","data":{"request_id":701,"order_id":101,"status":"PENDING","order_status":"IN_PROGRESS"},"request_id":"req_21"}`。
+- **成功 201**：`{"code":0,"message":"success","data":{"transfer_request_id":701,"order_id":101,"status":"PENDING","order_status":"IN_PROGRESS"},"request_id":"req_21"}`。
 - **失败示例 409**：`{"code":"DUPLICATE_OPERATION","message":"已有待处理转派申请","data":{"transfer_request_id":701},"request_id":"req_21"}`。
 - **状态/DB**：仅 `PENDING_ACCEPT` 或 `IN_PROGRESS`，工单状态和负责人不变；事务插入 `transfer_requests` 和同状态日志事件。每个有效派单最多一个 PENDING 申请。
 
@@ -300,7 +303,7 @@
 - **成功 200（批准）**：`{"code":0,"message":"success","data":{"transfer_request_id":701,"decision":"APPROVE","order_status":"PENDING_DISPATCH","version":7,"assignment_ended":true},"request_id":"req_22"}`。
 - **成功 200（拒绝）**：相同结构但 `decision=REJECT`、`order_status` 与 `version` 保持不变；追加审批事件。
 - **失败示例 409**：`{"code":"ORDER_VERSION_CONFLICT","message":"任务已发生变化，请刷新后重试","data":{"current_version":7},"request_id":"req_22"}`。
-- **状态/DB**：仅处理与当前有效派单相连的 PENDING 申请。拒绝只更新申请并写日志；批准则在同事务更新申请、结束派单、`PENDING_ACCEPT/IN_PROGRESS → PENDING_DISPATCH`、递增版本并写日志。旧维修历史保留。
+- **状态/DB**：仅处理与当前有效派单相连的 PENDING 申请。拒绝只更新申请并写日志；批准则在同事务更新申请及 `resolved_at`、结束派单、`PENDING_ACCEPT/IN_PROGRESS → PENDING_DISPATCH`、递增版本并写日志。旧维修历史保留。没有 PENDING 申请时不得调用本接口实现管理员主动改派；该能力属于 P1。
 
 ### API-23 提交维修结果
 
@@ -308,7 +311,7 @@
 - **请求体**：`repair_summary` 1～2000、`expected_version` 必填；维修结果图片先经 API-28 上传并以关联元数据展示，无需信任附件 ID 数组改变归属。
 - **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"status":"PENDING_VERIFY","version":8,"repair_summary":"更换损坏插座并测试正常"},"request_id":"req_23"}`。
 - **失败示例 422**：`{"code":"VALIDATION_ERROR","message":"维修说明必填","data":{"field":"repair_summary"},"request_id":"req_23"}`。
-- **状态/DB**：`IN_PROGRESS → PENDING_VERIFY`；保存当前摘要、条件更新状态/version、追加含结果快照的日志同事务；该派单尚未处理的转派申请标记为 `SUPERSEDED`。有效派单继续保留，若验收不通过仍由原负责人返工；验收通过时才结束并释放负载。
+- **状态/DB**：`IN_PROGRESS → PENDING_VERIFY`；同事务保存当前摘要、更新有效派单 `result_submitted_at`、条件更新状态/version、追加含结果快照的日志，并把该派单尚未处理的转派申请标记为 `SUPERSEDED`、写 `resolved_at` 与系统原因。有效派单继续保留，若验收不通过仍由原负责人返工；再次提交会更新最终结果时间。验收通过时才结束并释放负载。
 
 ### API-24 验收或返工
 
@@ -348,7 +351,7 @@
 ### API-28 上传图片
 
 - **请求**：`POST /api/files/upload`，`multipart/form-data`；原报修人在 `DRAFT/PENDING_SUPPLEMENT` 上传 `purpose=REPORT`，当前负责人在 `IN_PROGRESS` 上传 `purpose=REPAIR_RESULT`；FR-011，`TC-FILE-01～03`。
-- **字段**：`order_id` 正整数、`purpose` 枚举、`file` 必填；扩展名和实际 MIME 必须是 JPG/JPEG/PNG/WEBP，单张 ≤5 MB，每单有效图片总数 ≤3。
+- **字段**：`order_id` 正整数、`purpose` 枚举、`file` 必填；扩展名和实际 MIME 必须是 JPG/JPEG/PNG/WEBP，单张 ≤5 MiB。每单 `REPORT` 有效图片 ≤3，`REPAIR_RESULT` 有效图片也独立 ≤3。
 - **成功 201**：`{"code":0,"message":"success","data":{"id":901,"order_id":101,"purpose":"REPORT","original_name":"socket.jpg","mime":"image/jpeg","size_bytes":245120,"download_url":"/api/files/901"},"request_id":"req_28"}`。
 - **失败示例 415**：`{"code":"UNSUPPORTED_FILE_TYPE","message":"仅支持 JPG、JPEG、PNG、WEBP 图片","data":null,"request_id":"req_28"}`。
 - **DB/文件**：先写隔离临时文件并验证真实内容；事务内重查工单权限/状态/数量并插入 `attachments`，再原子移动为随机路径；失败补偿，不在响应中返回 `stored_path`。
@@ -380,11 +383,21 @@
 
 - **请求**：`GET /api/statistics/work-orders?from=2026-10-01&to=2026-10-31&group_by=day`；dispatcher 按区域，sysadmin 需 `STATS_VIEW`；FR-012，`TC-STAT-01～03`。
 - **约束**：日期必填且 `from<=to`，范围最多 366 天；`group_by=day/week/month`。
-- **成功 200**：`{"code":0,"message":"success","data":{"range":{"from":"2026-10-01","to":"2026-10-31"},"series":[{"bucket":"2026-10-19","created":8,"completed":5}],"category_distribution":[{"category_id":21,"name":"插座故障","count":3}],"completion_rate":0.625,"definitions":{"completion_rate":"期间内进入 COMPLETED 或 CLOSED 的工单数/期间内提交工单数"}},"request_id":"req_32"}`。
+- **成功 200**：`{"code":0,"message":"success","data":{"range":{"from":"2026-10-01","to":"2026-10-31"},"series":[{"bucket":"2026-10-19","submitted":8,"currently_completed_or_closed":5}],"category_distribution":[{"category_id":21,"name":"插座故障","count":3}],"completion_rate":0.625,"definitions":{"cohort":"submitted_at 落在区间内的授权范围工单","completion_rate":"该队列当前为 COMPLETED 或 CLOSED 的数量/该队列总数"}},"request_id":"req_32"}`。
 - **失败示例 422**：`{"code":"VALIDATION_ERROR","message":"统计日期范围不能超过 366 天","data":{"field":"to"},"request_id":"req_32"}`。
 - **DB**：只读聚合、先做区域过滤；无数据返回空 series 与 `completion_rate:null`，避免除零。P0 不承诺实时高并发性能。
 
-## 11. 状态—端点—事务核对
+## 11. 维修过程事件
+
+### API-33 到场/维修进度事件
+
+- **请求**：`POST /api/work-orders/{id}/progress-events`；仅当前有效负责人且工单为 `IN_PROGRESS`；FR-004、FR-009，`TC-PROG-01～03`。
+- **请求体**：`type` 为 `ARRIVED` 或 `PROGRESS_NOTE`，`expected_version` 必填但成功不递增工单版本；`ARRIVED` 的 `note` 可选且最多 500 字，`PROGRESS_NOTE` 的 `note` 必填且为 1～1000 字。
+- **成功 201**：`{"code":0,"message":"success","data":{"id":950,"order_id":101,"assignment_id":501,"type":"ARRIVED","order_status":"IN_PROGRESS","order_version":6,"created_at":"2026-10-19T10:20:00.000Z"},"request_id":"req_33"}`。
+- **失败示例 409**：`{"code":"DUPLICATE_OPERATION","message":"当前派单已记录到场","data":null,"request_id":"req_33"}`；非负责人返回隐藏资源的 404，非 `IN_PROGRESS` 返回 `ORDER_STATUS_CONFLICT`。
+- **状态/DB**：E-01/E-02 均不改变工单状态或版本。在短事务中重查工单、版本和当前有效派单后，向 `status_logs` 插入关联 `assignment_id` 的 `WORKER_ARRIVED` 或 `WORKER_PROGRESS_NOTE`；部分唯一索引保证每个派单最多一次到场。失败不产生事件。
+
+## 12. 状态—端点—事务核对
 
 | W1-D3 动作 | API | 前置 → 结果 | 关键事务 |
 |---|---|---|---|
@@ -392,22 +405,21 @@
 | T-02/T-05 | API-08 | `DRAFT/PENDING_SUPPLEMENT → PENDING_REVIEW` | 流水号 + 工单 + 日志 |
 | T-03/T-04/T-06 | API-13 | `PENDING_REVIEW → PENDING_DISPATCH/PENDING_SUPPLEMENT/CANCELLED` | 工单 + 日志 |
 | T-07/T-08/T-09/T-12 | API-12 | 允许前期状态 → `CANCELLED` | 工单 + 日志 |
-| T-10 | API-17 | `PENDING_DISPATCH` 不变 | 只读计算；可追加快照 |
-| T-11 | API-18 | `PENDING_DISPATCH → PENDING_ACCEPT` | 合格复核 + 派单 + 工单 + 日志 |
+| T-10 | API-17 | `PENDING_DISPATCH` 不变 | 严格只读计算，不写快照 |
+| T-11 | API-18 | `PENDING_DISPATCH → PENDING_ACCEPT` | 重算 + 最终快照 + 派单 + 工单 + 日志 |
 | T-13/T-14 | API-19/API-20 | `PENDING_ACCEPT → IN_PROGRESS/PENDING_DISPATCH` | 派单 + 工单 + 日志 |
 | T-15/T-16 | API-21 | 状态不变 | 转派申请 + 日志 |
 | T-17/T-18 | API-22 | `PENDING_ACCEPT/IN_PROGRESS → PENDING_DISPATCH` | 申请 + 结束派单 + 工单 + 日志 |
-| T-19 | API-23 | `IN_PROGRESS → PENDING_VERIFY` | 结果 + 工单 + 日志 |
+| T-19 | API-23 | `IN_PROGRESS → PENDING_VERIFY` | 最终结果时间 + SUPERSEDED 申请 + 工单 + 日志 |
 | T-20/T-21 | API-24 | `PENDING_VERIFY → COMPLETED/IN_PROGRESS` | 通过时结束派单；工单 + 返工计数 + 日志 |
 | T-22 | API-25 | `COMPLETED` 不变 | 唯一评价 + 日志 |
 | T-23 | API-27 | `COMPLETED → CLOSED` | 一致性检查 + 工单 + 日志 |
+| E-01/E-02 | API-33 | `IN_PROGRESS` 不变 | 当前派单校验 + 追加事件日志 |
 
-## 12. W1-D5 待确认/同步
+## 13. W1-D5 冻结结论
 
-1. SRS/追踪矩阵需同步 W1-D3 已决定的 DRAFT、关闭/评价、取消原因、单主要角色、worker 本人报修、sysadmin 显式授权和内部备注规则。
-2. 冻结 `management_grants` 的能力码与范围继承；本期不提供复杂授权后台，避免把 P1 用户管理扩入 P0。
-3. 冻结跨资源越权统一使用 404、明确可见资源但无动作权限使用 403 的策略。
-4. 冻结人工选择非 top 3 合格维修员时派单原因必填，以及转派拒绝原因必填。
-5. 冻结评价为单一总分还是多维分。本稿遵循 V1.1 最小契约使用单一 `score`。
-6. 本稿没有 `progress` 状态接口；“到场/进度”在 W1-D3 被定义为时间线事件，但需求追踪矩阵没有独立 P0 验收。若 W1-D5 确认需要，应新增明确事件端点和测试，不能静默实现。
-7. 将验收通过释放负载、维修结果提交使待处理转派申请 `SUPERSEDED` 的一致性规则同步到 `flows.md`；当前 W1-D3 转换表尚未明确这两个数据库效果。
+- API-01～API-33 是 P0 唯一接口编号基线；API-33 补齐到场/进度事件，不新增状态。
+- 跨资源越权用 404 隐藏存在性；明确可见资源但无动作权限用 403。
+- 推荐预览严格只读；非 Top 3 初次派单理由必填；管理员无申请主动改派为 P1。
+- 单项评价、双用途各 3 张附件、验收释放负载、转派申请 `SUPERSEDED` 和内部字段白名单均已冻结。
+- 本文只定义契约；所有接口和测试仍为待实现、待执行。
