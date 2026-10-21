@@ -11,6 +11,7 @@ compile_commands.json
 **/node_modules/
 frontend/dist/
 frontend/coverage/
+frontend/.npm-cache/
 # Environment and credentials
 .env
 .env.*
