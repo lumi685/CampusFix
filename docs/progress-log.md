@@ -94,3 +94,14 @@
 - 在真实浏览器打开 Vue 页面并目视检查。页面显示“后端在线”、`campusfix-backend` 和 `req_1035ff10-84a7-41c3-bd8a-fe6ba5034c34`；点击重新检测后 ID 变为 `req_341031ff-1997-4780-b51a-fbc65e6ffcf0`。
 - 关闭 Drogon 并确认 8848 端口释放后，在同一页面点击重新检测，显示“后端离线或请求失败”和“后端请求失败（HTTP 502）”，按钮仍可用。重启 Drogon 后再点击，恢复“后端在线”，显示新的 `req_e0636ebb-4e22-4f42-ae1b-963a8e39f189`。由于本机请求很快，加载中状态由代码覆盖，但未捕获到浏览器可见画面。
 - `npm run build` 成功，Vite `8.3.5` 构建无警告；最终 JS 入口约 190.75 kB。测试完成后按可执行路径及命令行核对进程并停止，确认 8848 和 5173 均无监听。本阶段未执行 W2-D5 启动脚本/完整冒烟测试，未 commit 或 push。
+
+## 2026-10-21 W2-D5：工程启动与冒烟测试
+
+- 开始前核对 `main` 与 `origin/main` 对齐，最近提交为 `69d46b4 feat: connect W2-D4 Vue frontend to Drogon health API`；工作区只有两份原有 W1-D3 未跟踪交接文件。`scripts/` 原先仅有 `.gitkeep`。
+- 新增 `scripts/start-backend.ps1`、`scripts/start-frontend.ps1`、`scripts/smoke.ps1`。启动脚本按 `$PSScriptRoot` 定位仓库、前台运行并检查端口；后端优先使用显式 CMake 路径或现有 CMake 缓存，首次配置通过参数或 `VCPKG_ROOT` 定位 vcpkg，不写死本机 Visual Studio 安装路径。端口占用时分别实测返回清晰错误，不批量结束进程。
+- README 保留原项目背景、四角色业务主线和 P0/P1/P2 范围，更新 Windows 实测版本、首次依赖准备、双终端启动、构建/健康检查/冒烟命令、停止方法、Git 忽略规则及常见故障；明确其他机器尚未验证。
+- 三份脚本 PowerShell 解析错误均为 0。复用现有 CMake/vcpkg 缓存，经后端脚本实际完成 MSVC Debug 编译并启动 Drogon，无编译警告；经前端脚本启动 Vite。`npm run build` 实际成功，无构建警告。
+- 首次 smoke 实测暴露 PowerShell 7 将 JSON 整数 `code` 解析为 `Int64`，脚本只接受 `Int32`；修正后完整测试通过：直连和代理各两次均为 HTTP 200、JSON、`code=0`、`status=ok`、`service=campusfix-backend`，四个 `request_id` 非空且同一路径重复请求不同；前端首页 HTTP 200 且含 CampusFix 标题和 Vue 挂载点。成功退出码 0。
+- 故障注入：核对进程路径后停止 Drogon，确认 8848 释放；smoke 返回连接拒绝、退出码 1。再次用后端脚本启动并运行 smoke，所有断言通过、退出码 0。测试结束按进程路径/命令行核对后仅停止本次两个服务，确认 8848 与 5173 均无监听。
+- 另外使用本机 Windows PowerShell `5.1.26100.9168` 对三份脚本解析检查均为 0 错误，并在该环境下再次通过两个启动脚本运行服务及完整 smoke，退出码 0；随后再次确认两个端口释放。
+- 本阶段仅做工程脚本、README 和进度记录；未连接 SQLite、未开发 W3 业务、未修改 W1 冻结设计、未 commit 或 push。新机器从空缓存进行首次依赖下载和配置尚未实际验证；本次验证复用了已有安装与构建缓存。
