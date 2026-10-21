@@ -1,6 +1,8 @@
 # Build output
 build/
 backend/build/
+vcpkg_installed/
+.vcpkg_installed/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
