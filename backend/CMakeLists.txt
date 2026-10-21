@@ -11,6 +11,7 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 add_executable(campusfix_backend
     src/main.cpp
+    src/controllers/HealthController.cpp
 )
 
 target_link_libraries(campusfix_backend

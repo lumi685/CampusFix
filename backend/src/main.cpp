@@ -1,8 +1,11 @@
 #include <drogon/drogon.h>
 
+#include "controllers/HealthController.h"
+
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string_view>
 
@@ -12,7 +15,18 @@ constexpr std::uint16_t kDefaultDevelopmentPort = 8848;
 
 std::uint16_t developmentPort()
 {
+#ifdef _MSC_VER
+    char *allocatedPort = nullptr;
+    std::size_t allocatedSize = 0;
+    if (_dupenv_s(&allocatedPort, &allocatedSize, "CAMPUSFIX_PORT") != 0)
+    {
+        throw std::runtime_error("Unable to read CAMPUSFIX_PORT");
+    }
+    const std::unique_ptr<char, decltype(&std::free)> portStorage(allocatedPort, &std::free);
+    const char *rawPort = portStorage.get();
+#else
     const char *rawPort = std::getenv("CAMPUSFIX_PORT");
+#endif
     if (rawPort == nullptr || *rawPort == '\0')
     {
         return kDefaultDevelopmentPort;
@@ -38,6 +52,7 @@ int main()
         const auto port = developmentPort();
         LOG_INFO << "CampusFix backend starting on http://127.0.0.1:" << port;
 
+        campusfix::registerHealthController();
         drogon::app().addListener("127.0.0.1", port);
         drogon::app().run();
         return 0;
