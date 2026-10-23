@@ -102,13 +102,9 @@ try {
     $timer.Stop();Assert-True ($timer.Elapsed.TotalSeconds -lt 9) 'Busy wait was not bounded'
     New-Item -ItemType File -Path $releaseFile|Out-Null
     $lockProcess.WaitForExit();Assert-True ($lockProcess.ExitCode -eq 0) 'Write lock fixture failed';$lockProcess=$null
-    # Unimplemented routes use Drogon's default response, not our JSON envelope.
-    foreach($probe in @(@('/api/work-orders',405),@("/api/work-orders/$id",404))) {
-        try {$probeResponse=Invoke-WebRequest -UseBasicParsing -Uri ($base+$probe[0]);$probeStatus=[int]$probeResponse.StatusCode}
-        catch {if(-not $_.Exception.Response) {throw};$probeStatus=[int]$_.Exception.Response.StatusCode}
-        Assert-True ($probeStatus -eq $probe[1]) 'Unexpected implementation of out-of-scope query route'
-        Write-Host "PASS unimplemented GET $($probe[0]) => $probeStatus"
-    }
+    # W4-D2 now implements these reads; they must not change the write-test receipts.
+    $null=Request '/api/work-orders?view=reported' $reporter $null 200 '' 'GET'
+    $null=Request "/api/work-orders/$id" $reporter $null 200 '' 'GET'
     $receipts=@{reporter=@{id=$id;create_request_id=$draft.request_id;submit_request_id=$submit.request_id};worker=@{id=$workerDraft.data.id;create_request_id=$workerDraft.request_id;submit_request_id=$workerSubmit.request_id}}
     $receiptPath=Join-Path $root 'receipts.json'
     $receipts|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $receiptPath -Encoding UTF8

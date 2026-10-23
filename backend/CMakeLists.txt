@@ -24,6 +24,8 @@ add_library(campusfix_database STATIC
     src/domain/WorkOrderValidation.cpp
     src/repositories/WorkOrderRepository.cpp
     src/services/WorkOrderService.cpp
+    src/repositories/WorkOrderQueries.cpp
+    src/services/WorkOrderReadService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium)
@@ -33,6 +35,7 @@ add_library(campusfix_http STATIC
     src/controllers/AuthController.cpp
     src/middleware/AuthGuard.cpp
     src/controllers/WorkOrderController.cpp
+    src/controllers/WorkOrderQueryController.cpp
 )
 target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database)
 add_executable(campusfix_backend src/main.cpp)
@@ -50,6 +53,26 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_work_order_read_test tests/integration/WorkOrderReadTest.cpp)
+    target_link_libraries(campusfix_work_order_read_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_work_order_read_test PRIVATE
+        CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    add_test(NAME work_order_read_service COMMAND campusfix_work_order_read_test)
+    add_executable(campusfix_work_order_read_http_fixture tests/integration/WorkOrderReadHttpFixture.cpp)
+    target_link_libraries(campusfix_work_order_read_http_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_work_order_read_test PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_work_order_read_http_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME work_order_read_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/WorkOrderReadHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>"
+        -Fixture "$<TARGET_FILE:campusfix_work_order_read_http_fixture>"
+        -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    set_tests_properties(work_order_read_http PROPERTIES TIMEOUT 60)
     add_executable(campusfix_work_order_test tests/integration/WorkOrderServiceTest.cpp)
     target_link_libraries(campusfix_work_order_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_work_order_test PRIVATE

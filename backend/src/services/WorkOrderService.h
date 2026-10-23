@@ -12,6 +12,8 @@ public:
     WorkOrder create(std::int64_t authenticatedId,const std::string &token,const WorkOrderInput &input,const std::string &requestId);
     WorkOrder submit(std::int64_t authenticatedId,const std::string &token,std::int64_t id,
                      std::int64_t expectedVersion,const std::string &requestId);
+    OrderPage list(std::int64_t authenticatedId,const std::string &token,const OrderQuery &query);
+    OrderDetail detail(std::int64_t authenticatedId,const std::string &token,std::int64_t id);
 private:
     SqliteConnection &db_;
     Clock clock_;
