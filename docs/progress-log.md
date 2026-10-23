@@ -144,3 +144,17 @@
 - 结果来源：用户在本次对话中报告，已在 Windows 本机 PowerShell 完成人工操作。以下为用户提供的验收结果，未由 Codex 在本轮重新执行，也不计入前述 Codex 实际执行的 CTest、HTTP 和冒烟测试结果。
 - 用户确认通过：隐藏密码输入；设置密码后账号仍保持禁用；通过单独操作显式启用指定单个账号；其他账号仍为禁用；启用账号使用真实 HTTP 登录成功。
 - 本次未提供截图、命令输出或运行日志，记录仅依据用户陈述，不补造证据。交互式演示账号激活的人工补验收项据此记为完成；前述高并发、跨机器及限流等未验证项保持不变。
+
+## 2026-10-23 W3-D4：统一认证、RBAC 与资源范围
+
+- 开始时 `main` 与 `origin/main` 对齐，W3-D3 提交为 `84170d2`，工作区仅两份原有 W1-D3 未跟踪交接文件。本阶段不修改它们、不 commit/push。
+- 发现冻结冲突后先暂停：SRS 第 47 章及 roles 禁止 worker 验收/评价，而 flows T-20～T-22 与 API-24/25 按原报修人授权。用户正式裁决方案 A，并批准受控勘误。已新增 D-017，最小同步 SRS/roles/API/flows/需求追踪：有效认证的 reporter 或 worker，只有数据库 reporter_id 等于本人 ID 才能按原报修人身份验收、返工、评价；维修派单身份和管理能力不替代该归属。状态、版本、重复操作约束不变，不新增 P0 功能。检查 architecture/ui-wireframes 等文档，未发现同样的绝对禁止条款。
+- 新增请求级 `AuthGuard`，复用 `AuthService.me` 校验 Bearer Session；请求属性只保存不含密码/Token 哈希的不可变身份对象，无全局可变当前用户。`me/logout` 复用 Guard，匿名 health/login 保留；未配置 DB 时受保护路由返回统一 401，登录因认证存储不可用返回 500，health 仍可独立运行。所有失败使用统一 JSON/request_id，不记录 Authorization。
+- 新增纯 `AuthorizationPolicy`、`AuthorizationRepository`、`AuthorizationService`。身份先经 Session 校验，Policy 服务再读当前启用状态、角色、有效 grants、工单 reporter_id、当前/历史派单及位置祖先；按动作、范围、归属判定权限。dispatcher 使用角色动作 + AREA_SCOPE；sysadmin 每个能力使用自己的 scope，NULL 为显式全局；授权不缓存，撤销后下一次检查生效。未知/不可见资源 404，已可见但动作不允许 403，身份无效 401；后续 operation 检查状态/版本/评价重复，返回相应 409。
+- 字段可见性以默认拒绝白名单为基础：本人、当前负责人及有业务读取权限的管理人员才有联系字段资格；历史负责人仅最小公开字段；内部备注需区域内 dispatcher，或同时满足 BUSINESS_READ 与 INTERNAL_NOTE_READ 各自范围的 sysadmin。密码/Token 哈希、stored_path、原始 metadata_json 和无关联系方式均不在白名单。尚未实现完整工单/附件 DTO，未来必须继续对嵌套对象逐字段投影。
+- 实际构建命令：`cmake --build backend/build --config Debug --parallel 4`（使用现有 VS CMake 绝对路径执行）。MSVC Debug 最终退出 0，未见编译警告；复用现有依赖缓存，无新依赖。`ctest --test-dir backend/build -C Debug --output-on-failure` 退出 0，6/6 通过：authorization_policy、guard_http、sodium_crypto、auth_service、schema_migration、demo_seed。
+- SQLite/Policy：独立临时库完成 56 项检查，包含 D-017 reporter/worker 本人验收、worker 本人返工/合法评价、他人报修禁止验收/评价（即使为当前维修负责人）、管理授权不得代行、状态/版本/重复/关闭保护；另覆盖越权隐藏、历史派单失效、区域祖先/后代、子区域不能向上越权、全局授权、各能力范围不混用、授权撤销、用户停用及字段白名单。测试夹具中的状态和评价记录由测试直接构造；未实现或声称通过 API-24/25 业务 HTTP。
+- 隔离 HTTP：`ctest --test-dir backend/build -C Debug -R '^guard_http$' -V` 退出 0，23 项 HTTP Guard 请求断言通过，另验证真实 login 200/no-store。覆盖匿名/非法/过期/撤销/禁用 Token 的 401、me/logout、同账号另一 Session 不受退出影响、伪造 query 身份无效、请求身份隔离、403/404 与统一响应结构。测试专用服务器独立链接，授权测试路由不进入生产可执行程序；临时随机密码、Token 和数据库在测试结束后清理，日志中未出现测试凭证。
+- 实际启动生产后端（无 DB 配置）与 Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，退出 0：直连/代理健康检查与首页通过。额外 HTTP 验证生产 me/logout 无 DB 时均 401，`/test/identity` 为 404。测试进程已停止，8848/5173 无 LISTEN。
+- 尚未验证：W4 业务 API、实际写操作的并发撤权竞争、高并发吞吐和正式限流。未来写入 Service 必须在同一连接短事务内复核授权、状态和版本，再执行条件写入/唯一约束；本日只读 Policy 不是业务事务的替代品。W3-D5 前端未开始。
+- 最终 Git 检查：`git diff --check` 退出 0；001 迁移、frontend 和 vcpkg 清单无变更。构建/测试产物受现有忽略规则保护，临时库和凭据由测试清理，冒烟运行日志已删除。新增文件仅设 intent-to-add 以便完整 Diff 审查，暂存区无实际变更内容；两份既有交接文件未纳入。

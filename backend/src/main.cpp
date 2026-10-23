@@ -115,8 +115,8 @@ int main(int argc, char *argv[])
         if (_dupenv_s(&allocatedDb,&allocatedDbSize,"CAMPUSFIX_DB_PATH") != 0)
             throw std::runtime_error("Unable to read CAMPUSFIX_DB_PATH");
         const std::unique_ptr<char, decltype(&std::free)> dbStorage(allocatedDb,&std::free);
-        if (allocatedDb && *allocatedDb)
-            campusfix::registerAuthController(std::filesystem::path(allocatedDb));
+        campusfix::registerAuthController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
         drogon::app().addListener("127.0.0.1", port);
         drogon::app().run();
         return 0;

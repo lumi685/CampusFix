@@ -315,6 +315,8 @@
 
 ### API-24 验收或返工
 
+- **原报修人资格（D-017 勘误）**：主要角色为 reporter 或 worker，且服务端读取的 `work_orders.reporter_id` 等于认证用户 ID；当前维修负责人身份和管理授权均不能替代该归属。状态、版本和重复操作限制照常适用。
+
 - **请求**：`POST /api/work-orders/{id}/verify`；仅原报修人；FR-009，`TC-WF-11～13`、`WF-D3-10`、`WF-D3-11`。
 - **请求体**：`approved` 布尔、`expected_version`；`approved=false` 时 `reason` 1～500 必填，true 时原因可选。
 - **成功 200**：`{"code":0,"message":"success","data":{"order_id":101,"approved":false,"status":"IN_PROGRESS","version":9,"rework_count":1},"request_id":"req_24"}`。
@@ -324,6 +326,8 @@
 ## 8. 评价与关闭
 
 ### API-25 创建评价
+
+- **原报修人资格（D-017 勘误）**：主要角色为 reporter 或 worker，且服务端读取的 `work_orders.reporter_id` 等于认证用户 ID；worker 只能评价自己报修的工单，管理人员不得代评价。状态、版本与每单一次限制照常适用。
 
 - **请求**：`POST /api/work-orders/{id}/evaluations`；仅原报修人；FR-010，`TC-WF-14`、`TC-WF-15`、`WF-D3-12`、`WF-D3-14`。
 - **请求体**：`score` 整数 1～5；`comment` 可选、最多 1000 字符；`expected_version` 必填但评价成功不递增工单版本。

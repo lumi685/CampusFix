@@ -1,5 +1,6 @@
 #pragma once
 #include "infrastructure/SqliteConnection.h"
+#include "models/ManagementGrant.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -7,7 +8,6 @@
 namespace campusfix {
 struct AuthUser { std::int64_t id=0; std::string username, passwordHash, displayName, role, status;
                   std::string tokenHash; bool expired=false, revoked=false; };
-struct Grant { std::string capability; bool global=false; std::int64_t locationId=0; };
 class AuthRepository {
 public:
     explicit AuthRepository(SqliteConnection &db):db_(db){}

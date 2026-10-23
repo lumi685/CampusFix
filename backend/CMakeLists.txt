@@ -18,29 +18,57 @@ add_library(campusfix_database STATIC
     src/repositories/AuthRepository.cpp
     src/services/AuthService.cpp
     src/services/DemoAccountActivation.cpp
+    src/domain/AuthorizationPolicy.cpp
+    src/repositories/AuthorizationRepository.cpp
+    src/services/AuthorizationService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium)
 
-add_executable(campusfix_backend
-    src/main.cpp
+add_library(campusfix_http STATIC
     src/controllers/HealthController.cpp
     src/controllers/AuthController.cpp
+    src/middleware/AuthGuard.cpp
 )
+target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database)
+add_executable(campusfix_backend src/main.cpp)
 
 target_link_libraries(campusfix_backend
     PRIVATE
-        Drogon::Drogon
-        campusfix_database
+        campusfix_http
 )
 
 if(MSVC)
     target_compile_options(campusfix_backend PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(campusfix_database PRIVATE /W4 /permissive-)
+    target_compile_options(campusfix_http PRIVATE /W4 /permissive- /utf-8)
 endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_authorization_test tests/integration/AuthorizationTest.cpp)
+    target_link_libraries(campusfix_authorization_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_authorization_test PRIVATE
+        CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_authorization_test PRIVATE /W4 /permissive-)
+    endif()
+    add_test(NAME authorization_policy COMMAND campusfix_authorization_test)
+
+    add_executable(campusfix_guard_test_server tests/integration/GuardTestServer.cpp)
+    target_link_libraries(campusfix_guard_test_server PRIVATE campusfix_http)
+    if(MSVC)
+        target_compile_options(campusfix_guard_test_server PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME guard_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/GuardHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_guard_test_server>"
+        -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    set_tests_properties(guard_http PROPERTIES TIMEOUT 60)
+
     add_executable(campusfix_sodium_test tests/integration/SodiumTest.cpp)
     target_link_libraries(campusfix_sodium_test PRIVATE unofficial-sodium::sodium)
     if(MSVC)

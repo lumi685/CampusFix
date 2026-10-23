@@ -1,6 +1,7 @@
 #include "controllers/AuthController.h"
 #include "common/ResponseUtils.h"
 #include "services/AuthService.h"
+#include "middleware/AuthGuard.h"
 #include <drogon/drogon.h>
 #include <functional>
 #include <memory>
@@ -13,11 +14,6 @@ using Callback=std::function<void(const drogon::HttpResponsePtr &)>;
 void send(const drogon::HttpResponsePtr &response,Callback &callback) {
     response->addHeader("Cache-Control","no-store");
     response->addHeader("Pragma","no-cache"); callback(response);
-}
-std::string bearer(const drogon::HttpRequestPtr &request) {
-    const std::string value=request->getHeader("Authorization");
-    if(value.rfind("Bearer ",0)!=0 || value.size()<=7) return {};
-    return value.substr(7);
 }
 Json::Value identity(const AuthUser &user) {
     Json::Value data(Json::objectValue);
@@ -33,8 +29,9 @@ void failure(Callback &cb,const std::string &requestId,drogon::HttpStatusCode st
 void registerAuthController(const std::filesystem::path &databasePath) {
     auto service=std::make_shared<AuthService>(databasePath);
     drogon::app().registerHandler("/api/auth/login",
-      [service](const drogon::HttpRequestPtr &request,Callback &&cb) {
+      [service,databasePath](const drogon::HttpRequestPtr &request,Callback &&cb) {
         const auto id=newRequestId();
+        if(databasePath.empty()) {failure(cb,id,drogon::k500InternalServerError,"INTERNAL_ERROR","Authentication unavailable");return;}
         try {
             const auto json=request->getJsonObject();
             if(!json) {failure(cb,id,drogon::k400BadRequest,"MALFORMED_REQUEST","Invalid JSON");return;}
@@ -59,19 +56,20 @@ void registerAuthController(const std::filesystem::path &databasePath) {
         }
       },{drogon::Post});
     drogon::app().registerHandler("/api/auth/me",
-      [service](const drogon::HttpRequestPtr &request,Callback &&cb) {
-        const auto id=newRequestId(); const auto token=bearer(request);
-        if(token.empty()) {failure(cb,id,drogon::k401Unauthorized,"AUTH_REQUIRED","请先登录");return;}
+      authenticated(databasePath,[](const drogon::HttpRequestPtr &request,Callback &&cb) {
+        const auto principal=requestIdentity(request);
+        const auto &id=principal->requestId;
         try {
-            auto result=service->me(token);
-            Json::Value data=identity(result.user);
+            Json::Value data(Json::objectValue);
+            data["id"]=Json::Int64(principal->id); data["username"]=principal->username;
+            data["display_name"]=principal->displayName; data["role"]=principal->role;
             data["capabilities"]=Json::Value(Json::arrayValue);
             data["scope_location_ids"]=Json::Value(Json::arrayValue);
-            for(const auto &grant:result.grants) {
+            for(const auto &grant:principal->grants) {
                 data["capabilities"].append(grant.capability);
                 if(!grant.global) data["scope_location_ids"].append(Json::Int64(grant.locationId));
             }
-            if(result.workerId) data["worker_id"]=Json::Int64(result.workerId);
+            if(principal->workerId) data["worker_id"]=Json::Int64(principal->workerId);
             send(successResponse(data,id),cb);
         } catch(const std::invalid_argument &error) {
             const bool expired=std::string(error.what())=="AUTH_EXPIRED";
@@ -80,11 +78,10 @@ void registerAuthController(const std::filesystem::path &databasePath) {
         } catch(const std::exception &) {
             failure(cb,id,drogon::k500InternalServerError,"INTERNAL_ERROR","Internal server error");
         }
-      },{drogon::Get});
+      }),{drogon::Get});
     drogon::app().registerHandler("/api/auth/logout",
-      [service](const drogon::HttpRequestPtr &request,Callback &&cb) {
-        const auto id=newRequestId(); const auto token=bearer(request);
-        if(token.empty()) {failure(cb,id,drogon::k401Unauthorized,"AUTH_REQUIRED","请先登录");return;}
+      authenticated(databasePath,[service](const drogon::HttpRequestPtr &request,Callback &&cb) {
+        const auto id=requestIdentity(request)->requestId; const auto token=bearerToken(request);
         try {
             if(!service->logout(token)) {
                 failure(cb,id,drogon::k401Unauthorized,"AUTH_INVALID","Invalid session");return;
@@ -94,6 +91,6 @@ void registerAuthController(const std::filesystem::path &databasePath) {
         } catch(const std::exception &) {
             failure(cb,id,drogon::k500InternalServerError,"INTERNAL_ERROR","Internal server error");
         }
-      },{drogon::Post});
+      }),{drogon::Post});
 }
 }

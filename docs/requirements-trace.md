@@ -28,8 +28,8 @@
 | FR-006 | 维修人员技能和负载管理 | P0 | dispatcher、sysadmin | WorkerService / AdminWorkers | W5 | TC-WORKER-01～03 | 待开发 |
 | FR-007 | 智能调度筛选与推荐评分 | P0 | dispatcher | DispatchService / DispatchPage | W6 | TC-DSP-01～10 | 待开发 |
 | FR-008 | 派单、接单、拒单和转派 | P0 | dispatcher、当前 worker | AssignmentService / DispatchPage、WorkerTasks | W6～W7 | TC-WF-04～09 | 待开发 |
-| FR-009 | 维修提交、返工和验收 | P0 | 当前 worker、原 reporter | WorkOrderService / WorkerTasks、OrderDetail | W7 | TC-WF-10～13 | 待开发 |
-| FR-010 | 评价、关闭与不可变历史 | P0 | 原 reporter、dispatcher | EvaluationService / OrderDetail、AdminOrders | W7 | TC-WF-14～16 | 待开发 |
+| FR-009 | 维修提交、返工和验收 | P0 | 当前 worker、原报修人（reporter/worker 本人） | WorkOrderService / WorkerTasks、OrderDetail | W7 | TC-WF-10～13 | 待开发 |
+| FR-010 | 评价、关闭与不可变历史 | P0 | 原报修人（reporter/worker 本人）、dispatcher | EvaluationService / OrderDetail、AdminOrders | W7 | TC-WF-14～16 | 待开发 |
 | FR-011 | 图片上传与授权下载 | P0 | 有工单权限的用户 | FileService / ReportForm、OrderDetail | W8 | TC-FILE-01～04 | 待开发 |
 | FR-012 | 看板与基础统计 | P0 | dispatcher、sysadmin | StatisticsService / AdminDashboard | W8 | TC-STAT-01～03 | 待开发 |
 | FR-013 | 并发派单一致性 | P0 | 系统后端 | AssignmentService / Repository | W6 + W9 | TC-CON-01～03 | 待开发 |
@@ -112,7 +112,7 @@
 
 ### FR-009 — 维修提交、返工和验收
 
-- **发起角色**：当前有效 `worker` 提交结果；原 `reporter` 验收。
+- **发起角色**：当前有效 `worker` 提交结果；原报修人验收（主要角色 reporter 或 worker，且数据库 reporter_id 等于认证用户 ID；D-017 勘误）。
 - **前置条件**：维修提交前工单为 `IN_PROGRESS`；验收前为 `PENDING_VERIFY`。
 - **触发和输入**：维修员填写 `repair_summary` 后提交；报修人提交 `approved=true/false`，未通过时填写 `reason`。
 - **正常结果**：提交结果 → `PENDING_VERIFY`，并在同一事务将未决转派申请改为 `SUPERSEDED`；通过 → `COMPLETED`，同时以 `COMPLETED` 结束有效派单并释放负载；不通过 → `IN_PROGRESS`，返工次数增加，保留当前负责人和旧结果/原因。
@@ -121,12 +121,14 @@
 
 ### FR-010 — 评价、关闭与不可变历史
 
-- **发起角色**：原 `reporter` 评价；授权 `dispatcher` 归档关闭。
+- **发起角色**：原报修人评价（主要角色 reporter 或 worker，且数据库 reporter_id 等于认证用户 ID；D-017 勘误）；授权 `dispatcher` 归档关闭。
 - **前置条件**：评价时为 `COMPLETED`；关闭时为 `COMPLETED` 且符合归档策略；历史事件已有操作人和时间。
 - **触发和输入**：报修人填写 1～5 分及可选评价文字；调度员执行关闭。
 - **正常结果**：同一工单最多保存一次有效评价；归档后状态为 `CLOSED`；整个生命周期历史按追加方式保留，不可通过普通编辑覆盖。
 - **异常/边界**：重复评价、评分超范围、未完成工单评价、关闭后新增评价或更改主体信息均失败；允许未评价的 `COMPLETED` 工单直接关闭。
 - **预期验收**：`TC-WF-14` 首次评价成功且 1～5 分限制有效；`TC-WF-15` 重复评价被数据库约束与服务层拒绝；`TC-WF-16` 关闭后工单不可编辑但历史仍可授权查询。
+
+D-017 补充验收（FR-009/010，W3-D4 先验证 Policy；不代表 API-24/25 已实现）：reporter/worker 可以验收本人报修；worker 可以对本人报修返工及在 COMPLETED 时评价；对他人报修，即使 worker 是当前负责人也不得验收/评价；sysadmin 管理授权不授予原报修人身份；本人操作仍须校验状态、版本和评价唯一性。
 
 ### FR-011 — 图片上传与授权下载
 

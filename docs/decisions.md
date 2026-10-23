@@ -72,6 +72,17 @@
 - 最终决定：P0 使用 16 张业务表与 33 个 REST API；接口编号以 `docs/api-contract.md` 的 API-01～API-33 为唯一基线，测试编号以 `docs/requirements-trace.md` 的登记为唯一语义来源，状态转换编号以 `docs/flows.md` 的 T-01～T-23 为唯一来源。
 - 一致性：SQLite 派单容量竞争使用短 `BEGIN IMMEDIATE` 事务；历史数据原则上不物理删除；外键删除策略和事务边界以数据库设计及架构文档为准。
 
+## W3-D4 冻结基线勘误
+
+### D-017 worker 本人报修的原报修人权限（冻结基线勘误）
+
+- 日期：2026-10-23
+- 状态：已接受（用户在 W3-D4 正式裁决）
+- 原始冲突：SRS 第 47 章及 roles 权限矩阵禁止 worker 验收/评价，而 API-24/25 与 flows T-20～T-22 按原报修人授权，未排除 worker 本人报修。
+- 选择方案 A：worker 本人报修必须能够完成合法报修闭环。主要角色为 reporter 或 worker 的认证用户，只有在服务端读取的 `work_orders.reporter_id` 等于本人 ID 时才具有原报修人操作资格，包括验收通过、返工和评价。
+- 约束：这是资源归属资格，不是 worker 的全局 VERIFY/EVALUATE 能力。worker 不能验收或评价他人的报修，即使本人是当前维修负责人；dispatcher/sysadmin 的管理授权也不能替代原报修人身份。业务状态、版本及重复操作约束不变。
+- 影响：最小同步 SRS、roles、API-24/25、flows T-20～T-22 和相关验收场景；不改变接口结构、状态码或数据库。此为冻结基线勘误，并非新增 P0 功能。
+
 ## 新决策模板
 
 ### D-XXX （标题待定）
