@@ -116,3 +116,15 @@
 - 启动当前 Drogon 与 Vite 后，运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`：后端直连两次、Vite 代理两次均 HTTP 200 且 JSON 字段正确，四次 `request_id` 非空且重复请求不同；前端首页检查通过，退出码 0。直接从当前默认 PowerShell 调用 `.ps1` 曾受执行策略阻止，使用进程级 `-ExecutionPolicy Bypass` 后通过，未更改系统策略。测试后停止本次两个进程，8848/5173 不再监听。
 - 构建产物、vcpkg 安装目录、临时 `.sqlite3` 数据库、前端 node_modules/dist 均被 `.gitignore` 覆盖。仅修改后端最小迁移基础设施、测试、CMake 与本日志；未开发认证/工单 API、未修改冻结设计、未 commit 或 push。
 - 尚未验证：跨机器首次配置与更高并发的业务事务；跨表身份/状态一致性和附件每用途最多 3 张属于后续 Service 短事务校验，不能仅由当前单表 CHECK/索引保证。W3-D2 种子数据与连接管理尚未开始。
+
+## 2026-10-23 W3-D2：SQLite 访问基础设施与虚拟演示数据
+
+- 开始时 `main` 与 `origin/main` 对齐，最新提交 `74c7c36 feat(db): add W3-D1 SQLite schema and migrations`；原有两份 W1-D3 未跟踪交接文件未改动。未修改 W1 冻结设计和 001 迁移。
+- 新增 `SqliteConnection`、`SqliteStatement`、`SqliteTransaction`：每个连接启用并核验 `foreign_keys=ON`，设置 5000 ms `busy_timeout`；支持参数绑定、错误抛出、RAII 释放与短写事务自动回滚。W3-D1 迁移器复用该连接封装；正常 HTTP 启动和 `/api/health` 仍不打开数据库。未建立 ORM、连接池或业务 Repository。
+- 新增显式维护命令 `--seed --db <sqlite-file> --seed-file <sql-file>`。仅在 001 迁移存在时打开已有数据库，并在 `BEGIN IMMEDIATE` 中执行可信项目内 seed SQL；不随服务启动自动 seed。稳定编码与 `ON CONFLICT DO NOTHING`/`NOT EXISTS` 保证重跑不重复、不覆盖已有普通数据；失败自动回滚，不使用 `INSERT OR REPLACE`。
+- 虚拟数据：11 个 `DISABLED` 账户（sysadmin 1、dispatcher 1、reporter 3、worker 6），14 个位置（2 校区、4 建筑、4 楼层、4 房间），3 种技能、3 个故障分类、6 份维修员档案、7 条人员技能、4 条显式管理授权、4 张合法已提交工单。工单各含创建草稿及提交两条时间线，合计 8 条。所有账户密码字段均为不可登录哨兵 `!UNSET_DEMO_CREDENTIAL!`；W3-D3 应先选成熟哈希算法并安全设置演示凭据、显式启用账户，不能将哨兵当作有效密码。
+- 在复用本机 vcpkg/CMake 缓存后，MSVC Debug 构建成功，`campusfix_database`、`campusfix_backend`、`campusfix_schema_test`、`campusfix_demo_seed_test` 均生成，未见编译警告。曾在受限沙箱遇到 MSBuild FileTracker `E_ACCESSDENIED`；获准本机执行后首次构建暴露一个 C++ 初始化语法错误，最小修复后重编译通过。
+- 对 `backend/build` 下忽略的临时库，实际执行 `--migrate` 和 `--seed`，均退出 0；查询确认四角色数量、位置/技能/授权/工单数量，`PRAGMA integrity_check=ok`、`PRAGMA foreign_key_check` 无违规。再次运行 seed 退出 0，账号、位置、技能、工单数量不增长。
+- `ctest --test-dir backend/build -C Debug --output-on-failure` 实际退出 0，2/2 通过（schema_migration、demo_seed）。新增自动化测试在全新临时库检查外键、角色/区域授权、时间线、完整性、参数绑定、事务析构回滚；重复 seed 保留人工修改的姓名和类别时长；注入一条有效写入后再触发无效外键，验证整批回滚；seed 在迁移前被拒绝且不创建库。测试仅使用虚构数据。
+- 启动 Drogon 与 Vite 后运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，实际退出 0：直连与代理各两次健康检查均 HTTP 200、JSON 字段正确且 `request_id` 变化，首页检查通过。已停止本次启动的服务进程；本轮未开发认证、工单或其他业务 API，未 commit/push。
+- 尚未验证：跨机器首次依赖安装与高并发业务读写。W3-D3 须确定安全密码哈希/演示凭据启用方式；业务 Repository 与鉴权逻辑留待其对应开发日完成。

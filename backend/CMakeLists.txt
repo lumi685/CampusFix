@@ -11,6 +11,8 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 add_library(campusfix_database STATIC
     src/infrastructure/DatabaseMigration.cpp
+    src/infrastructure/SqliteConnection.cpp
+    src/infrastructure/DemoSeed.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3)
@@ -41,4 +43,14 @@ if(BUILD_TESTING)
         target_compile_options(campusfix_schema_test PRIVATE /W4 /permissive-)
     endif()
     add_test(NAME schema_migration COMMAND campusfix_schema_test)
+
+    add_executable(campusfix_demo_seed_test tests/integration/DemoSeedTest.cpp)
+    target_link_libraries(campusfix_demo_seed_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_demo_seed_test PRIVATE
+        CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_demo_seed_test PRIVATE /W4 /permissive-)
+    endif()
+    add_test(NAME demo_seed COMMAND campusfix_demo_seed_test)
 endif()

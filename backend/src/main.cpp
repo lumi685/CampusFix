@@ -2,6 +2,7 @@
 
 #include "controllers/HealthController.h"
 #include "infrastructure/DatabaseMigration.h"
+#include "infrastructure/DemoSeed.h"
 
 #include <charconv>
 #include <cstdint>
@@ -55,16 +56,30 @@ int main(int argc, char *argv[])
     {
         if (argc != 1)
         {
-            if (argc != 6 || std::string_view(argv[1]) != "--migrate" ||
-                std::string_view(argv[2]) != "--db" ||
-                std::string_view(argv[4]) != "--migrations-dir")
+            if (argc != 6 || std::string_view(argv[2]) != "--db")
             {
                 throw std::runtime_error(
-                    "Usage: campusfix_backend --migrate --db <sqlite-file> --migrations-dir <directory>");
+                    "Usage: campusfix_backend --migrate --db <sqlite-file> --migrations-dir <directory> "
+                    "OR --seed --db <sqlite-file> --seed-file <sql-file>");
             }
-            campusfix::applyMigrations(std::filesystem::path(argv[3]),
-                                       std::filesystem::path(argv[5]));
-            std::cout << "Database migrations completed\n";
+            if (std::string_view(argv[1]) == "--migrate" &&
+                std::string_view(argv[4]) == "--migrations-dir")
+            {
+                campusfix::applyMigrations(std::filesystem::path(argv[3]),
+                                           std::filesystem::path(argv[5]));
+                std::cout << "Database migrations completed\n";
+            }
+            else if (std::string_view(argv[1]) == "--seed" &&
+                     std::string_view(argv[4]) == "--seed-file")
+            {
+                campusfix::applyDemoSeed(std::filesystem::path(argv[3]),
+                                         std::filesystem::path(argv[5]));
+                std::cout << "Demo seed completed\n";
+            }
+            else
+            {
+                throw std::runtime_error("Unknown maintenance command or argument order");
+            }
             return 0;
         }
         const auto port = developmentPort();
