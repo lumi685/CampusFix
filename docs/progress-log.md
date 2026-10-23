@@ -158,3 +158,27 @@
 - 实际启动生产后端（无 DB 配置）与 Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，退出 0：直连/代理健康检查与首页通过。额外 HTTP 验证生产 me/logout 无 DB 时均 401，`/test/identity` 为 404。测试进程已停止，8848/5173 无 LISTEN。
 - 尚未验证：W4 业务 API、实际写操作的并发撤权竞争、高并发吞吐和正式限流。未来写入 Service 必须在同一连接短事务内复核授权、状态和版本，再执行条件写入/唯一约束；本日只读 Policy 不是业务事务的替代品。W3-D5 前端未开始。
 - 最终 Git 检查：`git diff --check` 退出 0；001 迁移、frontend 和 vcpkg 清单无变更。构建/测试产物受现有忽略规则保护，临时库和凭据由测试清理，冒烟运行日志已删除。新增文件仅设 intent-to-add 以便完整 Diff 审查，暂存区无实际变更内容；两份既有交接文件未纳入。
+
+## 2026-10-23 W3-D5：前端认证与四角色导航（浏览器人工验收待完成）
+
+- 开始时 `main` 与 `origin/main` 对齐，W3-D4 提交 `2900d67`，工作区仅两份既有 W1-D3 交接文件未跟踪。未修改 W1 冻结文档、后端语义、Schema 或 Vite 代理。
+- 新增 LoginView、auth API、Vue reactive/readonly 认证状态、模块内存凭证桥接、导航/路由规则及身份/业务占位/无权限页；调整 App、AppLayout、Element Plus 组件注册与 Axios client，无新增依赖。Token 不进入 reactive 状态、localStorage/sessionStorage、URL、页面或日志，整页刷新后重新登录。前端守卫只控制体验，真正权限仍由后端判定。
+- 登录先真实调用 API-01，再用 API-03 核验身份后才显示受保护内容；失败不建立虚假身份。Axios 仅对显式 authRequired 的本应用 /api 请求附带 Bearer，阻止外部 URL/路径逃逸，丢弃携带配置或凭证的原始 Axios 错误。401 按凭证版本清理状态，避免旧请求清除新会话；403 保留当前认证，拦截器不直接跳路由以免循环。退出调用 API-02，失败时清除本机状态但明确未确认服务端撤销。
+- 菜单与路由共用定义：reporter 本人报修；worker 维修任务与本人报修分开；dispatcher 需 AREA_SCOPE；sysadmin 逐项按实际 capability 显示入口，不从扁平 scope_location_ids 摘要推断每项能力范围或全局权限。所有业务页均明确占位，未调用 W4 及以后业务接口。
+- 先对独立 `backend/build/w3d5-demo.sqlite3` 运行既有 migrate 和 seed，退出均为0。用户随后报告已在本机终端对 demo_reporter01/demo_worker01/demo_dispatcher/demo_sysadmin 逐个隐藏输入密码并显式启用，密码未交给 Codex。此为用户人工结果；Codex 仅用 SQLite 另行核对四角色各1个 ACTIVE，其他7个 DISABLED，未读取密码或哈希。
+- 本轮实测：Node `v24.18.1`、npm `11.16.0`；`npm run test:auth` 8/8通过、退出0（使用隔离 Axios adapter 的单元测试，不是浏览器E2E），覆盖身份核验等待、四角色导航/守卫规则、凭证发送范围、401/403差异、旧401不影响新凭证、登录后me失败的回滚与离线退出。`npm run build` 退出0，Vite无警告，JS入口约266.44 kB。
+- MSVC Debug `cmake --build backend/build --config Debug --parallel 4` 使用现有本机工具链实际退出0，无编译警告。`ctest --test-dir backend/build -C Debug --output-on-failure` 6/6通过、退出0，包含独立测试服务器的真实 login/me/logout HTTP 与权限测试；这些不代表本日四个手工账号的浏览器交互已通过。
+- 实际启动指向上述临时库的生产 Drogon 与 Vite；`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1` 退出0，直连/代理健康检查及首页均通过。经真实 Vite 代理实测错误密码登录401/AUTH_INVALID、缺字段422/VALIDATION_ERROR、匿名me/logout均401/AUTH_REQUIRED，JSON/request_id正确；`/login` HTML返回200。未获取用户密码，因此未执行四个账号的成功HTTP登录。
+- 浏览器工具未提供可用浏览器连接；尝试通过 computer-use 启动本机 Edge 后，自动化安全机制因无法可靠识别当前URL而停止。本轮未完成登录页面目视或任何四角色浏览器交互，不虚构截图。用户已明确要求亲自输入密码进行后续登录/退出/导航验收；详见 `W3-D5-manual-acceptance.md`，相关结果待用户提供后单独补记。
+- 内存Token仍可能受XSS影响；刷新/网络异常清除本地状态并不保证服务端已撤销，未撤销会话按服务端期限失效。正式部署HTTPS、限流及完整业务DTO等仍未验证。为保留用户已设置的演示凭据，临时库保留至人工验收结束后清理，受现有Git忽略规则保护；不自动commit/push，不进入W4。
+- 本轮结束已核对并停止自行启动的后端 PID 27768 与 Vite PID 35884，确认8848/5173均无LISTEN；运行日志检查未发现 `cf_live_` 或 `Bearer `，日志已清理。`git diff --check` 实际退出0，暂存区无实际内容；新增文件仅标记 intent-to-add 以完整审查Diff。保留临时演示库供用户人工验收，没有提前删除已设置的密码哈希；完整浏览器测试及该库最终清理仍待后续人工验收结束。
+
+### 2026-10-23 W3-D5 最终人工验收补记与阶段收尾
+
+- 阶段与实施范围：W3-D5 登录页、内存认证状态、Axios 认证集成、路由守卫及四角色导航占位。以下为后续补记，不覆盖上文开发时的实际执行记录。
+- 人工验收确认日期为2026-10-23，执行主体为项目开发者本人。用户明确反馈真实浏览器人工验收全部通过：登录页/隐藏密码/必填校验；reporter、worker、dispatcher、sysadmin分别登录并显示匹配导航；匿名及角色不匹配的受限URL被拒绝；错误密码安全提示；退出、保护旧页面及角色切换；整页刷新重新登录；后端离线时正确失败、不伪装认证成功。Codex本轮未重新执行浏览器操作。
+- worker包含本人报修和维修任务入口，符合D-017；dispatcher按角色动作及AREA_SCOPE限定区域，sysadmin依赖显式管理能力与各自范围，不默认拥有审核/派单/人员管理权。此次通过不代表尚未实现的工单业务接口已完成。
+- 截图证据按用户提供的说明记录：仅worker页面有截图支持，顶部为“Demo Worker 1 · 维修人员”，左侧包含本人报修和维修任务入口，业务页面标明后续占位。其余三角色依据用户人工确认；本轮未重新查看截图文件，不补造截图、日志或存储路径。
+- 此前Codex实际验证结果保留：前端认证单元测试8/8、后端CTest 6/6、MSVC Debug编译成功、npm生产构建成功且无警告、W2冒烟通过；真实代理HTTP错误密码401/缺字段422/匿名me及logout 401，Git Diff空白检查通过。本次仅补文档与检查Git，未重跑这些构建、测试或HTTP请求。
+- W3-D5最终状态：**通过验收**。W3整体状态：W3-D1～W3-D5五个开发单元均已完成阶段验收。下一阶段为W4-D1工单草稿创建与正式提交，本轮尚未开始。
+- 保留风险：内存Token刷新后丢失；本机清Token不能保证离线服务端Session已撤销；完整登录限流、高并发/全面安全审计、跨机器首次部署仍未完成；完整工单业务API尚未开发。临时数据库是否清理由开发者决定，本轮不改动数据库，不提交密码/Token/密钥或生成产物。
