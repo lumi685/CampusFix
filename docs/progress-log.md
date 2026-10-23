@@ -273,3 +273,71 @@
 - `G:/A_Study/CppProject/CampusFix/docs/progress-log.md`
 
 不属于本任务的既有未跟踪文件保持原样：`G:/A_Study/CppProject/CampusFix/docs/AI-HANDOFF-W1-D3.md`、`G:/A_Study/CppProject/CampusFix/docs/W1-D3-CODEX-PROMPT.md`。没有自动暂存上述任何文件。
+
+## 2026-10-23 W4-D4：基础选项前置补全与本人报修页面（待人工验收）
+
+- 开始时 main 与 origin/main 对齐，W4-D3 已提交 `f9a2604 feat(work-orders): add state machine and authorized timeline`，工作区仅两份原有 W1-D3 未跟踪交接文件。审计确认 API-04/05 未注册，有效身份真实 HTTP 均404，按要求暂停；用户随后明确批准先补齐两接口并验证后再开发前端。本轮没有暂存、commit/push，没有进入 W4-D5。
+- 范围：FR-002/003/004、API-04/05/06/08/09/10/11、D-011/012/017。没有修改冻结文档、Schema、seed、权限语义或依赖版本，不增加位置/分类管理CRUD。API-07/12/24/25/26、图片上传、审核/调度/维修/评价仍未开发。
+- 前置接口：CatalogController → CatalogService → CatalogRepository，复用 AuthGuard、AuthService 与 SQLite RAII/绑定/事务。省略 parent_id 返回有效根节点，指定正整数返回有效直接子节点；固定 code,id 排序。检查父节点存在及整条祖先链有效，停用或不存在父节点/停用祖先均返回空数组，不回退为全量。固定表名由服务端布尔值选择，用户值全部参数绑定；服务在同一只读快照内重新验证 Session 并查询，不写日志或业务记录。
+- 返回白名单：位置仅 id/code/name/location_type/parent_id，分类仅 id/code/name/default_priority；任一有效登录角色可读，匿名/过期/撤销401，未知或非法参数422，成功200 JSON/统一request_id/no-store。没有返回技能/资质/目标时长配置。
+- 前置验收先于前端编码：MSVC Debug构建成功、当时全部CTest **15/15通过（21.61秒、退出0）**、W2冒烟通过后才开始Vue页面；沙箱首次构建遇 MSBuild FileTracker E_ACCESSDENIED，申请本机执行后成功。CMake自动配置复用既有缓存，Drogon1.9.13#2、SQLite3.53.4#2、libsodium1.0.22#1未变，无新增依赖下载或编译警告。
+- 新增 catalog_service **33项 SQLite/Service检查**：四角色根节点、直接子级、不混入孙级、停用父/祖先和子项、根叶分类、无效父节点、401/422、完整数据库序列化指纹不变。新 catalog_http 最终 **52次真实生产HTTP请求**：其中基础选项40次、业务链路前的选项读取2次、reporter与worker创建→提交→列表→详情→时间线各5次（10次）。不是把Service或adapter单测记为HTTP；使用独立临时SQLite与每轮随机Token，测试后清理。GET批次后独立核验整库指纹不变、integrity_check=ok、foreign_key_check无违规，再执行明确的创建/提交写链路。
+- 实际API-04请求 `GET /api/locations?parent_id=1` 返回200：`{"code":0,"data":{"items":[{"code":"DEMO-A1","id":3,"location_type":"BUILDING","name":"Demo Building A1","parent_id":1},{"code":"DEMO-A2","id":4,"location_type":"BUILDING","name":"Demo Building A2","parent_id":1}]},"message":"success","request_id":"req_e026ac76-38ed-4c62-91a2-5ecd6642b607"}`。
+- 实际API-05请求 `GET /api/fault-categories?parent_id=101` 返回200：`{"code":0,"data":{"items":[{"code":"TEST-CHILD","default_priority":"NORMAL","id":102,"name":"Category child"}]},"message":"success","request_id":"req_4b4d7998-2139-4380-9ec7-530d818905eb"}`。该分类为临时测试夹具，未改正式seed。实际reporter链路order_id=9/order_no=WX202610230001，worker链路order_id=10/order_no=WX202610230002，均待审核/version2，详情一致，时间线为ORDER_CREATED、ORDER_SUBMITTED。
+- 前端：ReportNewView使用真实级联位置/分类，根分类可选，无硬编码ID；必填、Unicode长度、紧急枚举及日期转UTC校验，URGENT显示线下应急提醒，不接收图片。请求白名单不含客户端身份/状态/编号。创建成功后保存当前页面真实草稿ID/version；提交失败只重试同一草稿，409/网络中断时读取同一资源核对真实状态，版本变更不自动提交。创建响应不确定时阻止盲目重建并提示先查本人列表；离开未完成草稿页面时二次确认。没有复杂草稿箱/自动恢复。
+- MyOrdersView固定view=reported，状态/分类筛选、分页、真实列表与空/错/加载/重试状态；文案“我提交的报修”，worker维修任务仍独立占位。OrderDetailView只调用详情和公开时间线，显式渲染授权返回字段、十种状态中文标签、版本/编号/真实时间及可选联系方式/负责人，按页显示时间线，404统一隐藏存在性；不渲染内部备注/metadata/路径或未实现操作按钮。路由仅reporter/worker使用本轮本人报修页面，真正资源授权继续由后端执行。保留内存Token和刷新重登录策略，旧请求在组件销毁/新查询后不覆盖当前结果。
+- 前端实际命令（frontend目录）：`npm.cmd run test:auth` **8/8通过、退出0**；`npm.cmd run test:orders` **6/6通过、退出0**（字段白名单/Unicode/UTC、双击保护、同草稿重试、409更新版本、丢失提交响应恢复、创建不确定阻止重建、固定reported与API请求封装）。这些是Node逻辑及Axios adapter测试，不是Vue组件或浏览器E2E。`npm.cmd run build` **成功、退出0、未见警告**，Vite8.3.5转换1683模块，无新依赖，无lockfile变更。
+- 最终后端全量命令：使用CMakeCache对应VS CMake工具，`ctest --test-dir backend/build -C Debug --output-on-failure` **15/15通过、退出0、21.62秒**；包括全部W3与W4-D1～D3既有测试、新catalog两项和真实工单链路。MSVC命令 `cmake --build backend/build --config Debug --parallel 4` 已实际成功，退出0。
+- 最终W2回归：启动无数据库配置的正式后端及既有Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1` **退出0**，直连/代理各两次200JSON、code0/statusok/service、不同request_id及首页均通过。最后一次后端PID50284、前端PID50004，仅停止本轮进程；8848/5173剩余监听数0。测试目录及临时数据库/随机凭据/日志均已清理，既有演示库未改。
+- 浏览器证据：先查浏览器连接清单为空；按computer-use技能启动本机Edge后，窗口捕获被安全机制停止，原因是无法可靠确认当前浏览器URL。遵守停止要求，未继续UI输入，也未登录、填表、截图或宣称视觉/浏览器E2E通过。专用临时浏览器测试库及凭据已删除（仅本轮生成，可重新生成），后端PID47072和前端PID36972已核对路径并停止。人工验收步骤见 `docs/W4-D4-manual-acceptance.md`，全部待用户执行。
+- 未验证/风险：级联控件真实交互、窄屏/键盘布局、浏览器四角色路由、刷新重新登录后查看持久工单、断网/恢复及真实409页面交互仍待人工确认；已有逻辑单测和后端HTTP不得代替这些结论。草稿重试信息只存当前页面；创建结果不确定时需要人工核查列表，不保证跨刷新/跨页面幂等。Token内存方案、离线退出撤销未确认、完整登录限流、跨机器部署等既有风险保留。
+
+### W4-D4 文件完整清单（均未暂存）
+
+| 完整路径 | 类型/职责 |
+|---|---|
+| `G:/A_Study/CppProject/CampusFix/backend/src/controllers/CatalogController.h` | 新增：基础数据路由声明 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/controllers/CatalogController.cpp` | 新增：API-04/05、认证、参数与响应白名单 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/repositories/CatalogRepository.h` | 新增：最小目录读取模型与仓库声明 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/repositories/CatalogRepository.cpp` | 新增：绑定查询、有效父链与稳定直接子级 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/services/CatalogService.h` | 新增：目录查询服务声明 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/services/CatalogService.cpp` | 新增：只读事务与Session再验证 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/CatalogTest.cpp` | 新增：33项Service/SQLite检查及HTTP隔离夹具 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/CatalogHttpTest.ps1` | 新增：40次基础选项请求、2次选项读取及10次真实工单链路请求 |
+| `G:/A_Study/CppProject/CampusFix/backend/CMakeLists.txt` | 修改：编译源及两项CTest注册 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/controllers/WorkOrderController.cpp` | 修改：挂接基础数据路由，不改工单写语义 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/api/orders.js` | 新增：目录、本人报修、详情、时间线、创建/提交API |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/utils/orders.js` | 新增：状态/事件中文、日期、表单白名单与错误说明 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/utils/reportSubmission.js` | 新增：同草稿重试、409核对与重复保护 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/components/CatalogPicker.vue` | 新增：真实远端级联和加载失败重试 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/components/OrderStatusTag.vue` | 新增：统一中文状态标签 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/components/OrderTimeline.vue` | 新增：仅公开时间线显式渲染 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/views/ReportNewView.vue` | 新增：本人报修表单及创建/提交顺序 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/views/MyOrdersView.vue` | 新增：reported分页/筛选/详情入口 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/views/OrderDetailView.vue` | 新增：只读授权详情与分页时间线 |
+| `G:/A_Study/CppProject/CampusFix/frontend/tests/orders.test.js` | 新增：6项前端逻辑/API封装测试 |
+| `G:/A_Study/CppProject/CampusFix/frontend/package.json` | 修改：新增test:orders脚本，不增加依赖 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/api/client.js` | 修改：通用400/422、404、409提示，保留认证行为 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/router/index.js` | 修改：挂接三页与受保护详情路由 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/router/navigation.js` | 修改：本人报修文案，不改角色授权 |
+| `G:/A_Study/CppProject/CampusFix/frontend/src/layouts/AppLayout.vue` | 修改：已开放/占位范围说明 |
+| `G:/A_Study/CppProject/CampusFix/docs/W4-D4-manual-acceptance.md` | 新增：待人工验收步骤、证据边界与风险 |
+| `G:/A_Study/CppProject/CampusFix/docs/progress-log.md` | 修改：追加本轮真实结果，不覆盖历史 |
+
+本轮27个任务文件：新增19、修改8、删除0。两份W1-D3原有未跟踪交接文件不纳入。数据库/WAL/SHM、二进制/build、node_modules/dist继续被Git忽略；暂存区为空。最终 `git diff --check` 退出0；19个新文件分别no-index检查无空白诊断（差异退出1不等于空白错误），仅Git LF→CRLF提示。冻结文件/Schema/seed差异为空，凭据模式扫描无匹配，最终8848/5173监听数0。
+
+### 2026-10-23 W4-D4 人工验收阻塞修复：Element Plus漏注册
+
+- 用户人工反馈四控件只有标签、没有选择器；本阶段人工验收未通过。来源是用户明确报告，本轮没有用户Console日志或截图，不虚构浏览器证据。此前构建/HTTP/逻辑单测通过不足以证明控件正常渲染。
+- 根因证据：frontend/src/main.js只导入/注册ElAlert、ElButton、ElCard、ElTag、ElForm、ElFormItem、ElInput共7项，而模板实际使用20项。分类/位置依赖未注册的ElCascader，紧急度依赖ElSelect/ElOption，日期依赖ElDatePicker；另有ElTable/ElTableColumn/ElPagination/ElDescriptions/ElDescriptionsItem/ElTimeline/ElTimelineItem/ElEmpty/ElResult共9项同样缺失。模板/CSS检查未发现隐藏四控件的v-if/v-show/display:none/visibility:hidden逻辑。
+- 最小修复保留按需导入与逐项.use，仅补齐上述13项，总注册20项；没有改表单字段、真实API选项、UTC转换、Schema/seed、冻结契约或认证/RBAC。修改既有orders.test.js增加全src下Vue模板el-*与main.js导入/.use一致性的静态回归；先实际运行失败（6过1失败、退出1，列出13个缺失组件），修复后7/7过、退出0，证明检查可捕捉本次缺陷但不是浏览器E2E。补测08:30+08:00转换为00:30Z，日期仍可空。
+- 本轮实际前端命令：frontend目录执行npm.cmd run test:auth（8/8、退出0）、npm.cmd run test:orders（7/7、退出0）、npm.cmd run build（退出0，未见警告）。构建JS由此前307.45kB增至664.18kB（gzip220.64kB），原因是这次真正引入所需组件；未为压缩包重构架构或增加依赖。
+- 本轮实际后端回归：使用CMakeCache记录的VS CMake执行cmake --build backend/build --config Debug --parallel 4，本机MSVC Debug退出0、未见警告。ctest --test-dir backend/build -C Debug --output-on-failure共15/15通过、退出0、21.63秒。后端代码未因本次修复变化；catalog_service33项及catalog_http52次真实HTTP请求再度通过，包括API-04/05的200/401/422/过滤，reporter/worker各自API-06→08→09→10→11链路；不是浏览器表单操作。
+- 本轮HTTP实际样例：API-04 parent_id=1返回200、建筑id3/4，request_id=req_499f4223-dc3e-41b4-92e3-135fb69b7383；API-05 parent_id=101返回200、夹具分类id102且严格四字段，request_id=req_927a90b0-50ea-4b48-8faf-76a032d445c3。两角色链路编号分别WX202610230001/0002，时间线创建/提交事件齐全。临时数据库由测试清理，未动用户演示库；本轮未重新执行W2冒烟，不把上一轮结果说成本次重跑。
+- 浏览器边界：按computer-use技能检查本轮连接，apps=[]、browsers=[]；未继续此前因URL安全核验被停止的Windows浏览器路径。未读取本轮Console、未截图、未在浏览器选择/提交；所有四控件可见/打开/操作、根分类可选、NORMAL显示/URGENT提醒、真实日期选择和浏览器提交仍待用户复验。人工验收文档已保留失败结论并添加复验说明。
+- 本次相对上次交付只编辑4个文件（无新增/删除）：
+  - `G:/A_Study/CppProject/CampusFix/frontend/src/main.js`：补注册13个组件，唯一新增进入Git变更范围的文件。
+  - `G:/A_Study/CppProject/CampusFix/frontend/tests/orders.test.js`：注册一致性检查与UTC偏移回归。
+  - `G:/A_Study/CppProject/CampusFix/docs/W4-D4-manual-acceptance.md`：记录用户失败及待复验项。
+  - `G:/A_Study/CppProject/CampusFix/docs/progress-log.md`：本轮实测补记，保留上轮历史。
+- 因main.js原先不在27文件中，当前W4-D4总范围为28个：新增19、修改9、删除0，另两份原有W1-D3未跟踪交接文件保持原样，不纳入。没有git add/commit/push，不进入W4-D5；最终空白检查/暂存区核对结果见交付报告。状态：代码修复及自动化通过，人工验收仍未通过、等待复验。

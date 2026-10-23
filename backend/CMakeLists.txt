@@ -12,6 +12,8 @@ find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(jsoncpp CONFIG REQUIRED) # Already installed as a Drogon dependency; reuse its safe JSON parser.
 
 add_library(campusfix_database STATIC
+    src/repositories/CatalogRepository.cpp
+    src/services/CatalogService.cpp
     src/infrastructure/DatabaseMigration.cpp
     src/infrastructure/SqliteConnection.cpp
     src/infrastructure/DemoSeed.cpp
@@ -36,6 +38,7 @@ target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 uno
 target_link_libraries(campusfix_database PRIVATE JsonCpp::JsonCpp)
 
 add_library(campusfix_http STATIC
+    src/controllers/CatalogController.cpp
     src/controllers/HealthController.cpp
     src/controllers/AuthController.cpp
     src/middleware/AuthGuard.cpp
@@ -59,6 +62,21 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_catalog_test tests/integration/CatalogTest.cpp)
+    target_link_libraries(campusfix_catalog_test PRIVATE campusfix_database Drogon::Drogon)
+    target_compile_definitions(campusfix_catalog_test PRIVATE
+        CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+        CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_catalog_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME catalog_service COMMAND campusfix_catalog_test)
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME catalog_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/CatalogHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>" -Fixture "$<TARGET_FILE:campusfix_catalog_test>"
+        -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations" -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    set_tests_properties(catalog_http PROPERTIES TIMEOUT 60)
     add_executable(campusfix_state_machine_test tests/unit/WorkOrderStateMachineTest.cpp)
     target_link_libraries(campusfix_state_machine_test PRIVATE campusfix_database)
     add_test(NAME work_order_state_machine COMMAND campusfix_state_machine_test)

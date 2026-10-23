@@ -1,4 +1,5 @@
 #include "controllers/WorkOrderController.h"
+#include "controllers/CatalogController.h"
 #include "controllers/WorkOrderQueryController.h"
 #include "common/ResponseUtils.h"
 #include "middleware/AuthGuard.h"
@@ -82,6 +83,7 @@ void handle(const std::filesystem::path &path,const drogon::HttpRequestPtr &requ
 }
 }
 void registerWorkOrderController(const std::filesystem::path &path) {
+    registerCatalogController(path);
     registerWorkOrderQueryController(path);
     drogon::app().registerHandler("/api/work-orders",authenticated(path,
         [path](const drogon::HttpRequestPtr &req,HttpCallback &&cb){handle(path,req,cb);}),{drogon::Post});

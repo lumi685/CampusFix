@@ -41,7 +41,9 @@ function safeError(status, code, requestId, timeout = false) {
   else if (status === 0 || status >= 500) message = '无法连接后端或服务暂不可用，请确认后端已启动'
   else if (status === 401) message = '用户名或密码错误，或当前登录已失效'
   else if (status === 403) message = '当前账号无权访问此功能'
-  else if (status === 400 || status === 422) message = '请检查输入的用户名和密码格式'
+  else if (status === 404) message = '资源不存在或无权访问'
+  else if (status === 409) message = '工单状态或版本已变化，请核对最新数据'
+  else if (status === 400 || status === 422) message = '请求字段格式不正确，请检查输入'
   return new ApiError(message, status, code, requestId)
 }
 
