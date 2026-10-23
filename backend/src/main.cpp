@@ -2,6 +2,7 @@
 
 #include "controllers/HealthController.h"
 #include "controllers/AuthController.h"
+#include "controllers/WorkOrderController.h"
 #include "infrastructure/DatabaseMigration.h"
 #include "infrastructure/DemoSeed.h"
 #include "infrastructure/AuthCrypto.h"
@@ -116,6 +117,8 @@ int main(int argc, char *argv[])
             throw std::runtime_error("Unable to read CAMPUSFIX_DB_PATH");
         const std::unique_ptr<char, decltype(&std::free)> dbStorage(allocatedDb,&std::free);
         campusfix::registerAuthController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
+        campusfix::registerWorkOrderController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         drogon::app().addListener("127.0.0.1", port);
         drogon::app().run();

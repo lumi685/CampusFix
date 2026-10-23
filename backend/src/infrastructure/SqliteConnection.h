@@ -6,9 +6,18 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 
 namespace campusfix
 {
+class SqliteError:public std::runtime_error
+{
+public:
+    SqliteError(int code,const std::string &message):std::runtime_error(message),code_(code){}
+    int primaryCode() const noexcept {return code_ & 0xff;}
+private:
+    int code_;
+};
 class SqliteStatement
 {
 public:

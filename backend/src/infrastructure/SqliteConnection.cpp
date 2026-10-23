@@ -72,7 +72,7 @@ bool SqliteStatement::step()
     {
         return false;
     }
-    throw std::runtime_error("SQLite statement failed: " +
+    throw SqliteError(result,"SQLite statement failed: " +
                              std::string(sqlite3_errmsg(sqlite3_db_handle(statement_))));
 }
 
@@ -140,11 +140,12 @@ void SqliteConnection::execute(std::string_view sql)
 {
     char *error = nullptr;
     const std::string ownedSql(sql);
-    if (sqlite3_exec(database_, ownedSql.c_str(), nullptr, nullptr, &error) != SQLITE_OK)
+    const int result=sqlite3_exec(database_, ownedSql.c_str(), nullptr, nullptr, &error);
+    if (result != SQLITE_OK)
     {
         const std::string message = error != nullptr ? error : sqlite3_errmsg(database_);
         sqlite3_free(error);
-        throw std::runtime_error("SQLite execution failed: " + message);
+        throw SqliteError(result,"SQLite execution failed: " + message);
     }
 }
 
@@ -155,7 +156,7 @@ SqliteStatement SqliteConnection::prepare(std::string_view sql)
                                           &statement, nullptr);
     if (result != SQLITE_OK)
     {
-        throw std::runtime_error("SQLite prepare failed: " + std::string(sqlite3_errmsg(database_)));
+        throw SqliteError(result,"SQLite prepare failed: " + std::string(sqlite3_errmsg(database_)));
     }
     return SqliteStatement(statement);
 }

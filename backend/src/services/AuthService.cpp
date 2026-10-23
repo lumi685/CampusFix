@@ -35,9 +35,13 @@ LoginResult AuthService::login(const std::string &name,const std::string &passwo
     return result;
 }
 MeResult AuthService::me(const std::string &token) {
+    SqliteConnection db(path_);
+    return me(db,token);
+}
+MeResult AuthService::me(SqliteConnection &db,const std::string &token) {
     if(token.size()<20 || token.size()>128 || token.rfind("cf_live_",0)!=0)
         throw std::invalid_argument("AUTH_INVALID");
-    SqliteConnection db(path_); AuthRepository repo(db);
+    AuthRepository repo(db);
     const auto digest=tokenDigest(token);
     auto user=repo.userByTokenHash(digest);
     if(!user.id || user.status!="ACTIVE" || user.revoked ||

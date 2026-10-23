@@ -12,6 +12,8 @@ public:
     explicit AuthService(std::filesystem::path path):path_(std::move(path)){}
     LoginResult login(const std::string &username,const std::string &password);
     MeResult me(const std::string &token);
+    // Revalidate on a caller-owned transaction connection before protected writes.
+    static MeResult me(SqliteConnection &db,const std::string &token);
     bool logout(const std::string &token);
 private: std::filesystem::path path_;
 };
