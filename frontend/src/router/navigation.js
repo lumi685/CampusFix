@@ -5,7 +5,7 @@ export const roleLabels = {
 // A shared definition drives both menus and route guards. These entries are placeholders.
 export const navigation = [
   { id: 'home', path: '/home', title: '身份与授权', roles: Object.keys(roleLabels) },
-  { id: 'my-orders', path: '/my-orders', title: '我的报修', roles: ['reporter', 'worker'] },
+  { id: 'my-orders', path: '/my-orders', title: '我提交的报修', roles: ['reporter', 'worker'] },
   { id: 'report-new', path: '/report/new', title: '提交报修', roles: ['reporter', 'worker'] },
   { id: 'worker-tasks', path: '/worker/tasks', title: '待处理任务', roles: ['worker'] },
   { id: 'worker-history', path: '/worker/history', title: '维修记录', roles: ['worker'] },
