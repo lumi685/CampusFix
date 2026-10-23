@@ -1,12 +1,16 @@
 #include <drogon/drogon.h>
 
 #include "controllers/HealthController.h"
+#include "infrastructure/DatabaseMigration.h"
 
 #include <charconv>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 namespace
@@ -45,10 +49,24 @@ std::uint16_t developmentPort()
 }
 }  // namespace
 
-int main()
+int main(int argc, char *argv[])
 {
     try
     {
+        if (argc != 1)
+        {
+            if (argc != 6 || std::string_view(argv[1]) != "--migrate" ||
+                std::string_view(argv[2]) != "--db" ||
+                std::string_view(argv[4]) != "--migrations-dir")
+            {
+                throw std::runtime_error(
+                    "Usage: campusfix_backend --migrate --db <sqlite-file> --migrations-dir <directory>");
+            }
+            campusfix::applyMigrations(std::filesystem::path(argv[3]),
+                                       std::filesystem::path(argv[5]));
+            std::cout << "Database migrations completed\n";
+            return 0;
+        }
         const auto port = developmentPort();
         LOG_INFO << "CampusFix backend starting on http://127.0.0.1:" << port;
 

@@ -105,3 +105,14 @@
 - 故障注入：核对进程路径后停止 Drogon，确认 8848 释放；smoke 返回连接拒绝、退出码 1。再次用后端脚本启动并运行 smoke，所有断言通过、退出码 0。测试结束按进程路径/命令行核对后仅停止本次两个服务，确认 8848 与 5173 均无监听。
 - 另外使用本机 Windows PowerShell `5.1.26100.9168` 对三份脚本解析检查均为 0 错误，并在该环境下再次通过两个启动脚本运行服务及完整 smoke，退出码 0；随后再次确认两个端口释放。
 - 本阶段仅做工程脚本、README 和进度记录；未连接 SQLite、未开发 W3 业务、未修改 W1 冻结设计、未 commit 或 push。新机器从空缓存进行首次依赖下载和配置尚未实际验证；本次验证复用了已有安装与构建缓存。
+
+## 2026-10-23 W3-D1：SQLite Schema 与最小迁移
+
+- 以 W1-D5 冻结的 `database-design.md` 为依据，新增 `backend/migrations/001_initial_schema.sql`：16 张 P0 业务表、主键/外键（历史引用显式 `ON DELETE RESTRICT`，会话到用户为 `CASCADE`）、枚举/范围 CHECK、唯一约束、33 个显式索引（其中 4 个为关键部分唯一索引）。额外的 `schema_migrations` 仅记录迁移版本，不计入 16 张业务表。
+- 新增显式维护命令 `campusfix_backend --migrate --db <sqlite-file> --migrations-dir <directory>`。迁移器在连接建立后、事务开始前设置并核验 `foreign_keys=ON`，设置 5000 ms `busy_timeout`，要求 SQLite ≥3.35；整个待执行迁移集合在 `BEGIN IMMEDIATE` 事务内运行，版本记录与 DDL 同事务提交，重复运行跳过已执行版本。正常 HTTP 启动不打开数据库，健康检查仍独立。未启用 WAL。
+- 复用现有 MSVC/CMake/vcpkg 配置，CMake 重新配置成功，vcpkg 报 Drogon `1.9.13#2` 与 SQLite `3.53.4#2` 均已安装，无新下载。第一次受限沙箱 MSBuild FileTracker 报 `E_ACCESSDENIED`；获准在 Windows 本机执行同一 Debug 构建后成功。最终重新编译 `campusfix_database`、`campusfix_schema_test`、`campusfix_backend` 均成功，未见编译警告。
+- 独立测试程序以临时虚构数据实测：从空库初始化、16 张业务表及 33 个显式索引存在、外键删除策略、非法外键/重复用户名与单号/角色与状态等 CHECK、同一工单最多一条有效派单、待处理转派与到场事件唯一性、评价唯一性及评分范围。旧派单结束后允许新有效派单；两个草稿可同时拥有 `NULL` 单号。`PRAGMA integrity_check` 返回 `ok`，`PRAGMA foreign_key_check` 返回 0 行。重复迁移输出 `SKIP`，原有两条测试工单仍在。包含一个有效 001 与故障 002 的失败迁移实验确认所有 DDL 和版本元数据均回滚；临时测试目录成功后删除。
+- 另以实际后端可执行文件对忽略的临时 SQLite 文件运行迁移命令，首次输出 `APPLY 001_initial_schema.sql`，再次输出 `SKIP 001_initial_schema.sql`；SQLite CLI 查询到 17 张非系统表（含版本表）、33 个显式索引，`integrity_check=ok`、`foreign_key_check` 无输出。
+- 启动当前 Drogon 与 Vite 后，运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`：后端直连两次、Vite 代理两次均 HTTP 200 且 JSON 字段正确，四次 `request_id` 非空且重复请求不同；前端首页检查通过，退出码 0。直接从当前默认 PowerShell 调用 `.ps1` 曾受执行策略阻止，使用进程级 `-ExecutionPolicy Bypass` 后通过，未更改系统策略。测试后停止本次两个进程，8848/5173 不再监听。
+- 构建产物、vcpkg 安装目录、临时 `.sqlite3` 数据库、前端 node_modules/dist 均被 `.gitignore` 覆盖。仅修改后端最小迁移基础设施、测试、CMake 与本日志；未开发认证/工单 API、未修改冻结设计、未 commit 或 push。
+- 尚未验证：跨机器首次配置与更高并发的业务事务；跨表身份/状态一致性和附件每用途最多 3 张属于后续 Service 短事务校验，不能仅由当前单表 CHECK/索引保证。W3-D2 种子数据与连接管理尚未开始。
