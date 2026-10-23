@@ -1,8 +1,12 @@
 #include <drogon/drogon.h>
 
 #include "controllers/HealthController.h"
+#include "controllers/AuthController.h"
 #include "infrastructure/DatabaseMigration.h"
 #include "infrastructure/DemoSeed.h"
+#include "infrastructure/AuthCrypto.h"
+#include "services/DemoAccountActivation.h"
+#include <sodium.h>
 
 #include <charconv>
 #include <cstdint>
@@ -54,8 +58,28 @@ int main(int argc, char *argv[])
 {
     try
     {
+        campusfix::initializeCrypto();
         if (argc != 1)
         {
+            if (argc == 6 && std::string_view(argv[2]) == "--db" &&
+                std::string_view(argv[4]) == "--username")
+            {
+                if (std::string_view(argv[1]) == "--set-demo-password")
+                {
+                    std::string secret = campusfix::readSecretFromConsole();
+                    try { campusfix::setDemoPassword(argv[3], argv[5], secret); }
+                    catch (...) { sodium_memzero(secret.data(), secret.size()); throw; }
+                    sodium_memzero(secret.data(), secret.size());
+                    std::cout << "Demo password set; account remains disabled\n";
+                    return 0;
+                }
+                if (std::string_view(argv[1]) == "--enable-demo")
+                {
+                    campusfix::enableDemoAccount(argv[3], argv[5]);
+                    std::cout << "Named demo account enabled\n";
+                    return 0;
+                }
+            }
             if (argc != 6 || std::string_view(argv[2]) != "--db")
             {
                 throw std::runtime_error(
@@ -86,6 +110,13 @@ int main(int argc, char *argv[])
         LOG_INFO << "CampusFix backend starting on http://127.0.0.1:" << port;
 
         campusfix::registerHealthController();
+        char *allocatedDb=nullptr;
+        std::size_t allocatedDbSize=0;
+        if (_dupenv_s(&allocatedDb,&allocatedDbSize,"CAMPUSFIX_DB_PATH") != 0)
+            throw std::runtime_error("Unable to read CAMPUSFIX_DB_PATH");
+        const std::unique_ptr<char, decltype(&std::free)> dbStorage(allocatedDb,&std::free);
+        if (allocatedDb && *allocatedDb)
+            campusfix::registerAuthController(std::filesystem::path(allocatedDb));
         drogon::app().addListener("127.0.0.1", port);
         drogon::app().run();
         return 0;

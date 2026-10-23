@@ -128,3 +128,19 @@
 - `ctest --test-dir backend/build -C Debug --output-on-failure` 实际退出 0，2/2 通过（schema_migration、demo_seed）。新增自动化测试在全新临时库检查外键、角色/区域授权、时间线、完整性、参数绑定、事务析构回滚；重复 seed 保留人工修改的姓名和类别时长；注入一条有效写入后再触发无效外键，验证整批回滚；seed 在迁移前被拒绝且不创建库。测试仅使用虚构数据。
 - 启动 Drogon 与 Vite 后运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，实际退出 0：直连与代理各两次健康检查均 HTTP 200、JSON 字段正确且 `request_id` 变化，首页检查通过。已停止本次启动的服务进程；本轮未开发认证、工单或其他业务 API，未 commit/push。
 - 尚未验证：跨机器首次依赖安装与高并发业务读写。W3-D3 须确定安全密码哈希/演示凭据启用方式；业务 Repository 与鉴权逻辑留待其对应开发日完成。
+
+## 2026-10-23 W3-D3：密码哈希与可撤销会话
+
+- 开始时 `main` 与 `origin/main` 对齐，W3-D2 最新提交为 `4d38d7f`；仅两份原有 W1-D3 交接文件未跟踪。保留 vcpkg baseline，新增 `libsodium`，实际解析 `1.0.22#1`；Drogon `1.9.13#2`、SQLite `3.53.4#2` 未变化。CMake 配置成功，`unofficial-sodium::sodium` 链接成功；最小程序运行验证 `sodium_init()`、Argon2id 哈希/验证和安全随机数，Debug `libsodium.dll` 实际加载。
+- 新增 AuthCrypto、AuthRepository、AuthService、AuthController；密码使用 libsodium Argon2id 编码串，Session Token 为 32 字节安全随机数，库中仅存其 SHA-256 摘要。登录插入 Session 与更新 `last_login_at` 同事务；退出仅撤销当前 Session；`me` 查询数据库验证撤销、UTC 过期及账户启用状态。响应禁止缓存，不返回哈希字段；`/api/health` 仍不访问数据库。`CAMPUSFIX_DB_PATH` 指定认证使用的本地库，未设置时不注册认证路由。
+- 本地维护命令 `--set-demo-password --db <file> --username <demo_...>` 从交互式隐藏输入读取密码，只能设置仍为禁用且带原始哨兵的指定虚拟账号；`--enable-demo --db <file> --username <demo_...>` 是单独事务操作，仅在 Argon2id 哈希存在时启用。seed 账户保持默认禁用，测试密码随机生成于忽略的临时文件，未写入源码/SQL。
+- MSVC Debug 最终构建退出 0、无编译警告。曾因沙箱 FileTracker 权限拒绝而转本机编译；一次源文件 UTF-8 编译错误通过对后端目标启用 `/utf-8` 修复。最终 CTest 4/4 通过：`sodium_crypto`、`auth_service`、`schema_migration`、`demo_seed`。认证自动化测试覆盖密码校验、禁用/未知用户、不同 Token、数据库不保存原 Token、撤销、另一会话不受影响、服务对象重建、过期和 Session 写入故障回滚。
+- 使用独立临时 SQLite 测试库实际请求 HTTP：正确登录 200；错误密码、未知用户、禁用账号均 `401/AUTH_INVALID`；有效 `me` 200；无 Token/非法 Token 401；退出 200 后原 Token 401，另一有效会话仍 200；重启 Drogon 后未过期 Session 的 `me` 仍 200；修改测试库过期时间后 `401/AUTH_EXPIRED`；禁用已登录账户后旧 Token 为 401。模拟 Session 插入失败返回 500，Session 数量与 `last_login_at` 不变。数据库查询原始 Token 数量为 0。
+- W2 `scripts/smoke.ps1` 实际退出 0，直连及 Vite 代理健康检查与首页均通过。检查 8 个本次运行日志，未发现测试密码、`cf_live_` Token 前缀或 Argon2id 哈希前缀；日志约 70 字节，未进行更广泛的运行日志审计。测试进程均停止，8848/5173 无监听。`git diff --check` 退出 0；未修改 W1 文档、未 commit/push。
+- 尚未验证：高并发登录/密码哈希吞吐、跨机器部署、穷举攻击防护与正式限流。当前同步 Argon2id 校验在请求处理线程执行，生产化前应评估限流及专用执行资源；W3-D4 仍需完成跨资源 RBAC。
+
+### 2026-10-23 用户人工补验收：交互式演示账号激活
+
+- 结果来源：用户在本次对话中报告，已在 Windows 本机 PowerShell 完成人工操作。以下为用户提供的验收结果，未由 Codex 在本轮重新执行，也不计入前述 Codex 实际执行的 CTest、HTTP 和冒烟测试结果。
+- 用户确认通过：隐藏密码输入；设置密码后账号仍保持禁用；通过单独操作显式启用指定单个账号；其他账号仍为禁用；启用账号使用真实 HTTP 登录成功。
+- 本次未提供截图、命令输出或运行日志，记录仅依据用户陈述，不补造证据。交互式演示账号激活的人工补验收项据此记为完成；前述高并发、跨机器及限流等未验证项保持不变。
