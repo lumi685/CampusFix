@@ -1,5 +1,6 @@
 #pragma once
 #include "repositories/WorkOrderRepository.h"
+#include "models/StatusLog.h"
 #include <chrono>
 #include <functional>
 
@@ -14,6 +15,7 @@ public:
                      std::int64_t expectedVersion,const std::string &requestId);
     OrderPage list(std::int64_t authenticatedId,const std::string &token,const OrderQuery &query);
     OrderDetail detail(std::int64_t authenticatedId,const std::string &token,std::int64_t id);
+    TimelinePage timeline(std::int64_t authenticatedId,const std::string &token,std::int64_t id,const TimelineQuery &query);
 private:
     SqliteConnection &db_;
     Clock clock_;

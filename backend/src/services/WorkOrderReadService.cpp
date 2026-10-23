@@ -1,5 +1,6 @@
 #include "services/WorkOrderService.h"
 #include "services/AuthorizationService.h"
+#include "domain/WorkOrderStateMachine.h"
 #include <limits>
 #include <set>
 
@@ -11,9 +12,7 @@ void validateOrderQuery(const OrderQuery &q) {
     if(q.pageSize<1||q.pageSize>100) invalid("page_size");
     if(q.page-1>std::numeric_limits<std::int64_t>::max()/q.pageSize) invalid("page");
     if(q.categoryId&&*q.categoryId<=0) invalid("category_id");
-    static const std::set<std::string> statuses={"DRAFT","PENDING_REVIEW","PENDING_SUPPLEMENT","PENDING_DISPATCH",
-        "PENDING_ACCEPT","IN_PROGRESS","PENDING_VERIFY","COMPLETED","CLOSED","CANCELLED"};
-    if(q.status&&!statuses.count(*q.status)) invalid("status");
+    if(q.status&&!WorkOrderStateMachine::knownState(*q.status)) invalid("status");
 }
 OrderPage WorkOrderService::list(std::int64_t user,const std::string &token,const OrderQuery &query) {
     SqliteTransaction snapshot(db_,false);

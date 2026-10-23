@@ -106,6 +106,14 @@ int main() {
         failure([&]{svc.submit(r.id,r.token,rollbackDraft.id,1,"failed-new-date");});
         check(db.scalarInt("SELECT count(*) FROM order_number_sequences WHERE business_date='19700102'")==0,"failed first daily allocation is rolled back");
         db.execute("DROP TRIGGER fail_submit");
+        db.execute("CREATE TRIGGER fail_order_update BEFORE UPDATE ON work_orders WHEN NEW.status='PENDING_REVIEW' BEGIN SELECT RAISE(ABORT,'injected order write failure'); END");
+        const auto beforeUpdateFailure=db.scalarInt("SELECT count(*) FROM status_logs");
+        failure([&]{svc.submit(r.id,r.token,rollbackDraft.id,1,"failed-order-update");});
+        const auto unchanged=repo.find(rollbackDraft.id);
+        check(unchanged.status=="DRAFT"&&unchanged.version==1&&!unchanged.orderNo&&!unchanged.submittedAt&&
+            db.scalarInt("SELECT count(*) FROM order_number_sequences WHERE business_date='19700102'")==0&&
+            db.scalarInt("SELECT count(*) FROM status_logs")==beforeUpdateFailure,"order UPDATE fault rolls back allocation and leaves no orphan event");
+        db.execute("DROP TRIGGER fail_order_update");
         auto secondDay=svc.submit(r.id,r.token,rollbackDraft.id,1,"second-day");
         check(secondDay.orderNo=="WX197001020001","new business date starts at 0001");
         const auto beforeCreate=db.scalarInt("SELECT count(*) FROM work_orders");

@@ -2,6 +2,8 @@
 #include "services/AuthService.h"
 #include "services/AuthorizationService.h"
 #include "domain/WorkOrderValidation.h"
+#include "domain/WorkOrderStateMachine.h"
+#include "repositories/StatusLogRepository.h"
 
 namespace campusfix {
 namespace {
@@ -19,10 +21,13 @@ WorkOrder WorkOrderService::create(std::int64_t id,const std::string &token,cons
     authenticate(id,token);
     require(AuthorizationService(db_).order(id,Action::Create,0));
     validateWorkOrderInput(input);
+    const auto *rule=WorkOrderStateMachine::find(std::nullopt,WorkflowAction::Create);
+    if(!rule) throw WorkOrderError(409,"ORDER_STATUS_CONFLICT","Creation is not allowed");
     WorkOrderRepository repo(db_);repo.validateReferences(input);
     const auto time=orderTime(clock_());
     const auto order=repo.create(id,input,time.utc);
-    repo.log(order.id,id,"ORDER_CREATED",{},"DRAFT",time.utc,requestId);
+    StatusLogEntry event;event.orderId=order.id;event.actorId=id;event.action="ORDER_CREATED";
+    event.toStatus=rule->to;event.createdAt=time.utc;event.requestId=requestId;StatusLogRepository(db_).append(event);
     tx.commit();return order;
 }
 WorkOrder WorkOrderService::submit(std::int64_t user,const std::string &token,std::int64_t id,
@@ -42,6 +47,8 @@ WorkOrder WorkOrderService::submit(std::int64_t user,const std::string &token,st
         throw error;
     }
     WorkOrderRepository repo(db_);const auto order=repo.find(id);
+    const auto *rule=WorkOrderStateMachine::find(order.status,WorkflowAction::Submit);
+    if(!rule) throw WorkOrderError(409,"ORDER_STATUS_CONFLICT","Submission is not allowed");
     validateWorkOrderInput(order.input);repo.validateReferences(order.input);
     const auto time=orderTime(clock_());
     if(order.status=="PENDING_SUPPLEMENT"&&(!order.orderNo||!order.submittedAt))
@@ -50,7 +57,9 @@ WorkOrder WorkOrderService::submit(std::int64_t user,const std::string &token,st
         throw WorkOrderError(500,"INTERNAL_ERROR","Draft numbering invariant violated");
     const auto number=order.orderNo?*order.orderNo:repo.allocateNumber(time.businessDate,time.utc);
     repo.submit(order,number,time.utc);
-    repo.log(id,user,"ORDER_SUBMITTED",order.status,"PENDING_REVIEW",time.utc,requestId);
+    StatusLogEntry event;event.orderId=id;event.actorId=user;event.action="ORDER_SUBMITTED";
+    event.fromStatus=order.status;event.toStatus=rule->to;event.createdAt=time.utc;event.requestId=requestId;
+    StatusLogRepository(db_).append(event);
     const auto result=repo.find(id);tx.commit();return result;
 }
 }

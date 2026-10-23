@@ -1,4 +1,5 @@
 #include "repositories/WorkOrderRepository.h"
+#include "repositories/StatusLogRepository.h"
 #include <iomanip>
 #include <sstream>
 
@@ -52,10 +53,8 @@ void WorkOrderRepository::submit(const WorkOrder &o,const std::string &number,co
 }
 void WorkOrderRepository::log(std::int64_t order,std::int64_t actor,const std::string &action,
     const std::optional<std::string> &from,const std::string &to,const std::string &utc,const std::string &requestId) {
-    auto q=db_.prepare("INSERT INTO status_logs(order_id,actor_id,action,from_status,to_status,created_at,request_id) "
-        "VALUES(?1,?2,?3,?4,?5,?6,?7)");
-    q.bindInt(1,order);q.bindInt(2,actor);q.bindText(3,action);
-    if(from) q.bindText(4,*from);else q.bindNull(4);
-    q.bindText(5,to);q.bindText(6,utc);q.bindText(7,requestId);q.step();
+    // Compatibility for existing fixture callers; a single append implementation owns SQL.
+    StatusLogEntry e;e.orderId=order;e.actorId=actor;e.action=action;e.fromStatus=from;
+    e.toStatus=to;e.createdAt=utc;e.requestId=requestId;StatusLogRepository(db_).append(e);
 }
 }

@@ -1,4 +1,5 @@
 #include "domain/AuthorizationPolicy.h"
+#include "domain/WorkOrderStateMachine.h"
 #include <algorithm>
 #include <set>
 
@@ -52,19 +53,24 @@ AccessDecision AuthorizationPolicy::operation(const Subject &s,Action a,const Or
                                              std::int64_t version) {
     const auto permission=order(s,a,o); if(!permission.allowed()) return permission;
     bool valid=false;
+    const auto flow=[&](WorkflowAction action){return WorkOrderStateMachine::find(o.status,action)!=nullptr;};
     switch(a) {
-    case Action::VerifyPass: case Action::VerifyFail: valid=o.status=="PENDING_VERIFY";break;
-    case Action::Evaluate: valid=o.status=="COMPLETED";break;
-    case Action::Edit: case Action::Submit: valid=o.status=="DRAFT"||o.status=="PENDING_SUPPLEMENT";break;
-    case Action::Review: valid=o.status=="PENDING_REVIEW";break;
-    case Action::Recommend: case Action::Assign: valid=o.status=="PENDING_DISPATCH";break;
-    case Action::Accept: case Action::Refuse: valid=o.status=="PENDING_ACCEPT";break;
-    case Action::Transfer: valid=o.status=="PENDING_ACCEPT"||o.status=="IN_PROGRESS";break;
-    case Action::Complete: case Action::Progress: valid=o.status=="IN_PROGRESS";break;
-    case Action::Close: valid=o.status=="COMPLETED";break;
+    case Action::VerifyPass:valid=flow(WorkflowAction::VerifyPass);break;
+    case Action::VerifyFail:valid=flow(WorkflowAction::VerifyFail);break;
+    case Action::Evaluate:valid=flow(WorkflowAction::Evaluate);break;
+    case Action::Edit:valid=o.status=="DRAFT"||o.status=="PENDING_SUPPLEMENT";break; // Content edit, not a T transition.
+    case Action::Submit:valid=flow(WorkflowAction::Submit);break;
+    case Action::Review:valid=flow(WorkflowAction::ApproveReview);break;
+    case Action::Recommend:valid=flow(WorkflowAction::Recommend);break;
+    case Action::Assign:valid=flow(WorkflowAction::Assign);break;
+    case Action::Accept:valid=flow(WorkflowAction::Accept);break;
+    case Action::Refuse:valid=flow(WorkflowAction::Refuse);break;
+    case Action::Transfer:valid=flow(WorkflowAction::RequestTransfer);break;
+    case Action::Complete:valid=flow(WorkflowAction::Complete);break;
+    case Action::Progress:valid=WorkOrderStateMachine::processAllowed(o.status,ProcessEvent::ProgressNote);break;
+    case Action::Close:valid=flow(WorkflowAction::Close);break;
     case Action::Cancel:
-        valid=o.status=="DRAFT"||o.status=="PENDING_REVIEW"||o.status=="PENDING_SUPPLEMENT"||
-              (o.status=="PENDING_DISPATCH"&&managed(s,"CANCEL",o));break;
+        valid=flow(WorkflowAction::Cancel)&&(o.status!="PENDING_DISPATCH"||managed(s,"CANCEL",o));break;
     default: return {403,"ACTION_FORBIDDEN"};
     }
     if(!valid) return {409,"ORDER_STATUS_CONFLICT"};

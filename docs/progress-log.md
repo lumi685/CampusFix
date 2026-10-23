@@ -220,3 +220,56 @@
 - W2实际回归：启动无数据库配置的正式后端与既有Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，退出0；直连/代理各两次200 JSON、不同request_id与前端首页均通过。实际核对本轮监听PID：后端46748、前端49052；仅停止本轮进程，结束时8848/5173监听数0。独立临时数据库、凭据及测试日志已清理，本轮生成的冒烟日志目录已删除；既有演示库未动。
 - Git检查：`git diff --check`退出0；新增文件另作空白检查；修改范围仅本阶段后端实现/测试和本进度记录。数据库/WAL/SHM、构建缓存、node_modules/dist仍被忽略，未纳入凭据或两份既有交接文件；暂存区保持为空。
 - 尚未验证/残余风险：未做大数据量/高并发查询压测、执行计划优化或跨机器部署。只读快照保证请求内身份/授权/total/items一致；并发撤权时已经取得快照的在途读取可能按旧快照完成，不宣称能撤回已发送数据。当前/历史派单由SQLite夹具构造，未来实际转派/审核业务仍须各自事务验证。附件摘要与内部事件管理字段、API-07/API-11及后续业务端点和Vue业务页尚未开发；本阶段完成待用户验收。
+
+## 2026-10-23 W4-D3：统一状态规则、追加日志仓库与授权时间线
+
+- 开始时 main 与 origin/main 对齐，W4-D2 已提交为 `5386477 feat(work-orders): add scoped list and detail queries`；工作区仅两份既有 W1-D3 未跟踪交接文件。本轮未修改两份交接文件、W1 冻结文档、001 迁移、seed、依赖清单或前端，不接触原演示库；不自动暂存、commit/push，不进入 W4-D4。
+- 对应 FR-002/003/004/010、API-11、T-01～T-23、E-01/E-02、D-011/D-012/D-014/D-017。原日志 SQL 位于 WorkOrderRepository::log，原状态校验分散于 AuthorizationPolicy::operation、WorkOrderService 和列表校验。现将流程判断统一为纯 WorkOrderStateMachine，日志 SQL 集中至 StatusLogRepository；保留原 log 方法作为既有调用者的薄委托，没有第二套 INSERT 实现。
+- 状态机固定十个状态，按“源状态 + 明确动作”查找23条冻结规则；区分创建、状态改变、只读推荐和同状态事件。T-10 为只读；T-15/T-16/T-22 为不改变主状态的事件；E-01/E-02 独立定义，不增加状态或T规则。状态机不授权、不读写数据库、不自动产生日志；未提供任意目标状态更新函数或HTTP入口。AuthorizationPolicy 的流程部分复用该定义，但身份、归属、区域、管理能力、待派单取消主体限制、版本和重复评价保护仍独立保留，未改变 D-017 或 RBAC 语义。
+- 现有 create/submit/补充再提交接入状态机与 StatusLogRepository，保留 ORDER_CREATED/ORDER_SUBMITTED 稳定动作、原编号规则、首次 submitted_at、409 状态/版本错误和 request_id。工单、流水、日志仍处于同一 BEGIN IMMEDIATE；日志仓库不自行 BEGIN/COMMIT，所有字段参数化绑定。模块仅提供 append/page，无 UPDATE/DELETE 或修改历史的HTTP接口。只保证应用访问边界，不宣称有SQLite写权限者已被数据库层禁止修改历史。
+- API-11：`GET /api/work-orders/{id}/timeline`，复用 AuthGuard、Session、AuthorizationService。默认page=1/page_size=20（50只是契约请求示例），支持显式50/100与1～100边界、正整数及偏移溢出校验；SQL固定order_id，排序created_at ASC,id ASC。认证、授权、字段资格、total/items在同一只读快照内完成；未知/隐藏越权404、匿名401、非法参数422。详情与时间线实际路由分别验证，未提前实现其他写接口。
+- 公开DTO严格为id/action/from_status/to_status/public_note/actor{id,display_name}/created_at，系统actor为null。原报修人、worker本人报修、当前和受控历史维修任务按已有资源规则读取。dispatcher仅有效AREA_SCOPE内可见内部字段；sysadmin须同时满足BUSINESS_READ与INTERNAL_NOTE_READ各自范围，撤销后下一请求立即失去内部字段或整体读取资格；没有把BUSINESS_READ等同于内部备注权限。
+- 管理投影仅按已识别事件动作、前后状态及标量类型提取review_action/category_id/approved_urgency、assignment_id/worker_id/assign_reason/candidate_rank、transfer_request_id/decision、rework_count；未知事件、跨类型键、错误类型、重复键、损坏/过深/过大JSON均默认不投影。普通读取不SELECT内部列；公开模型不含原始metadata。复用Drogon已经安装的JsonCpp 1.9.6解析器，仅显式链接既有目标，无新包、无manifest或版本变化。未来审核/派单/转派/返工日志的写入契约仍须由对应业务Service实现，本轮只对受控历史夹具验证投影，不宣称这些业务API已经存在。
+- 实际构建：使用CMakeCache记录的本机VS CMake执行 `cmake --build backend/build --config Debug --parallel 4`，最终MSVC Debug退出0、未见编译警告；自动配置复用既有依赖。沙箱首次构建遇MSBuild FileTracker E_ACCESSDENIED，经申请本机执行后成功，未切换工具链或安装依赖。
+- 实际全量：`ctest --test-dir backend/build -C Debug --output-on-failure`，最终 **13/13通过、退出0**，约19.03秒。新增work_order_state_machine/work_order_timeline_service/work_order_timeline_http三项；检查项数是各程序内部断言，不等同于CTest项目数。
+- 纯状态规则 **290项检查通过**：独立预期矩阵逐条核对十状态、23条T规则的编号/动作/源目标/效果，穷举状态与动作组合、终态禁止恢复、非法跳转和独立E事件。完整规则定义不等于实现未来业务写操作；没有通过伪造夹具宣称审核/派单/维修等HTTP通过。
+- 时间线SQLite/Service **93项检查通过（不是HTTP）**：公开/管理投影、四角色归属/区域、当前及带内部备注的历史派单访问、空时间线、空actor、跨能力范围不匹配、建筑/房间匹配、撤权、同时间排序、1/50/100分页、非法参数、日志外层事务回滚和只读性。检查整张日志所有持久字段指纹以及工单状态/version/时间不变；integrity_check=ok，foreign_key_check无违规。
+- 正式生产程序HTTP **58项请求检查通过**：真实Bearer GET、200/401/404/422、SQLite独立SQL逐字段比较、公开与管理嵌套白名单、跨用户/跨校区/无授权拒绝、历史任务只能公开字段、撤销内部授权后公开降级、撤销BUSINESS_READ后404、分页/total/稳定排序、空结果、request_id每请求生成及API-10/API-11路由不冲突。临时未来事件由测试直接写库，未调用或冒充未实现的业务接口。
+- 实际公开请求 `GET /api/work-orders/1/timeline` 返回200、code=0、page=1/page_size=20/total=2：ORDER_CREATED（id1、NULL→DRAFT、actor{id3,Demo Reporter 1}、2020-01-01T07:55:00.000Z）和ORDER_SUBMITTED（id5、DRAFT→PENDING_REVIEW、同actor、2020-01-01T08:00:00.000Z），没有内部字段；GET的request_id为 `req_8c11bf91-80c7-4a7b-88e7-9435e092d30e`。历史日志写请求ID不在公开白名单，未与本次GET请求ID混淆。
+- 实际匹配管理授权请求 `GET /api/work-orders/5/timeline?page_size=1&page=4` 返回200、total=15，ORDER_REVIEWED/id12，actor{id2,Demo Dispatcher}，internal_note="Fixture internal note"，management_detail仅含review_action=APPROVE/category_id=1/approved_urgency=HIGH，request_id=`req_e6b4d866-1d58-463f-a41b-af20ae150de2`。这些是本轮真实响应中的虚构夹具数据，不是实际审核业务已实现的证据。
+- W4-D1回归：**54项SQLite/Service、48项生产HTTP检查通过**；追加工单UPDATE故障注入，确认状态、版本、编号流水及日志一起回滚且无孤立事件，原日志INSERT故障、创建/提交/补充、重复提交、版本冲突及并发编号保护继续通过。W4-D2的**59项SQLite/Service、72项生产HTTP检查**通过；W3的56项Policy检查、23项隔离Guard HTTP及认证、密码、迁移、seed测试均通过。
+- W2回归：实际启动无数据库配置的正式后端与现有Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1`，退出0，直连/代理各两次健康检查及首页通过。核对监听属于本轮后端PID49964、前端PID31064；仅停止这两个进程，8848/5173监听数0。临时测试库、随机凭据和测试运行日志已清理；本轮生成的冒烟日志目录已删除，原演示库未动。
+- Git完整性：先执行git status --short与git diff --check（退出0），新增未跟踪源文件另用no-index检查空白；暂存区保持为空。构建/数据库/WAL/SHM、node_modules/dist仍被忽略，凭证模式扫描未发现可用密码/Token/密钥。代码中测试标记仅为不可用哨兵，真实测试Token按轮生成并在测试后清理。生产源码仅StatusLogRepository含status_logs INSERT，无UPDATE/DELETE。
+- 未验证/风险：未进行大规模时间线压测、断电/磁盘满故障或跨机器部署；追加式由模块边界保证，不是防御数据库管理员篡改的机制。并发撤权的在途请求仍遵循已取得的只读快照。未来业务Service必须继续验证实际负责人、原因、容量、版本和事务，状态机“合法”不能替代权限与前置条件；API-07/12及后续写接口、Vue业务页、上传均未开发。本阶段完成，等待用户功能与文件范围验收。
+
+### W4-D3 新建但未跟踪文件（完整路径与职责）
+
+| 路径 | 职责 |
+|---|---|
+| `G:/A_Study/CppProject/CampusFix/backend/src/domain/WorkOrderStateMachine.h` | 纯状态/动作/效果/过程事件接口 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/domain/WorkOrderStateMachine.cpp` | 十状态、T-01～23、E-01～02统一定义与查找 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/models/StatusLog.h` | 写入记录、内部读取记录、已投影时间线DTO与分页 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/repositories/StatusLogRepository.h` | 追加/查询接口，不暴露更新或删除 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/repositories/StatusLogRepository.cpp` | 单一参数化INSERT、按工单分页SELECT，无自行提交 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/services/WorkOrderTimelineService.cpp` | 认证/资源/字段授权、只读快照、严格metadata投影 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/controllers/WorkOrderTimelineController.h` | API-11注册声明 |
+| `G:/A_Study/CppProject/CampusFix/backend/src/controllers/WorkOrderTimelineController.cpp` | HTTP入参、公开/管理JSON白名单与统一错误 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/unit/WorkOrderStateMachineTest.cpp` | 独立冻结矩阵与非法组合测试 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/TimelineTestData.h` | 独立临时历史事件/授权夹具及全日志指纹 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/TimelineServiceTest.cpp` | SQLite、权限、投影、排序、只读与外层回滚验证 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/TimelineHttpFixture.cpp` | 仅测试CLI：准备/调整授权、独立SQL快照与完整性核验 |
+| `G:/A_Study/CppProject/CampusFix/backend/tests/integration/TimelineHttpTest.ps1` | 启动正式程序、真实HTTP断言及清理，不输出Token |
+
+### W4-D3 已跟踪修改文件（完整路径）
+
+- `G:/A_Study/CppProject/CampusFix/backend/CMakeLists.txt`
+- `G:/A_Study/CppProject/CampusFix/backend/src/domain/AuthorizationPolicy.cpp`
+- `G:/A_Study/CppProject/CampusFix/backend/src/repositories/WorkOrderRepository.cpp`
+- `G:/A_Study/CppProject/CampusFix/backend/src/services/WorkOrderService.cpp`
+- `G:/A_Study/CppProject/CampusFix/backend/src/services/WorkOrderService.h`
+- `G:/A_Study/CppProject/CampusFix/backend/src/services/WorkOrderReadService.cpp`
+- `G:/A_Study/CppProject/CampusFix/backend/src/controllers/WorkOrderQueryController.cpp`
+- `G:/A_Study/CppProject/CampusFix/backend/tests/integration/WorkOrderServiceTest.cpp`
+- `G:/A_Study/CppProject/CampusFix/docs/progress-log.md`
+
+不属于本任务的既有未跟踪文件保持原样：`G:/A_Study/CppProject/CampusFix/docs/AI-HANDOFF-W1-D3.md`、`G:/A_Study/CppProject/CampusFix/docs/W1-D3-CODEX-PROMPT.md`。没有自动暂存上述任何文件。
