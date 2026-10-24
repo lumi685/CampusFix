@@ -441,3 +441,25 @@
 - 上轮真实20/20 CTest、60个编辑Service断言、74次正式HTTP、认证9/9与报修/补充16/16、构建/冒烟/SQLite完整性结果全部保留；本轮只更新文档和检查Git，没有重跑这些测试。首次测试夹具游标未释放导致锁错误及修复作用域的历史保留。
 - 英文审计摘要列为非阻塞UI文案优化，本阶段不改代码。原有物理故障/高压/跨机器未测、内存Token/离线退出/限流等风险不自动变为已验证或已解决。
 - 本轮仅编辑docs/W5-D2-manual-acceptance.md、docs/W5-D2-acceptance-report.md、docs/progress-log.md，新增0/删除0；累计W5-D2仍13修改/10新增/0删除。未改业务、冻结设计、Schema、seed或数据库，未git add/commit/push。**W5-D2自动化和用户人工验收通过，等待最终Git与源码审查；不进入W5-D3。**
+
+## 2026-10-24 W5-D3：Worker后端实现及阶段测试（链接占用阻塞，未完成验收）
+
+- 起始main/HEAD=2e690674cb6a9678032c0f0b1d9e10f2e8c8dc1b，与本地origin/main对齐，工作区/暂存干净；未fetch。按FR-006/API-14～16新增Worker模型、Controller、Service、Repository及隔离测试，不新增人员创建/删除、管理员Vue或W6调度，不改Schema/seed/冻结契约和认证权限语义。
+- 列表SQL按授权服务区域过滤及计算total、稳定分页，worker仅mine=true绑定本人；负载只统计ended_at IS NULL，历史超载保留真实任务数、remaining=0且Controller告警。PUT同一BEGIN IMMEDIATE内重验身份、旧区域和目标区域及实时容量，技能采用停用/UPSERT与重新生效，不物理删除，不触碰派单/工单/状态日志；没有expected_version或人员乐观锁。
+- 规则边界已说明：服务区域依SRS13.1限制有效校区/楼宇；已分配任务时修改状态/区域/技能仅影响后续资格数据，不自动释放任务。证书要求不被自动满足，空技能集不保留旧有效技能；完整候选过滤留给W6。
+- MSVC源文件和新测试目标编译成功，但全工程构建退出1，正式exe链接报LNK1168。只读本机检查确认既有PID37648运行backend/build/Debug/campusfix_backend.exe（2026-10-24 14:11:35启动），监听8848；5173由既有PID6600占用。均非本轮启动，没有擅自停止。等待用户停止原服务或批准指定PID后继续，不使用旧exe冒充新接口已测试。
+- 已实际执行worker_service：1/1通过、退出0、1.17秒，60个SQLite/Service断言，独立临时库integrity_check=ok、foreign_key_check无违规。前端test:auth9/9、test:orders16/16、build成功，均退出0，保留既有大chunk警告（674.60kB/gzip223.17kB）。新纯Policy测试0。
+- 尚未执行新Worker正式HTTP（0次）、全量CTest/W5-D1/2/W4回归及W2冒烟，明确未验证，不宣称W5-D3完成或端口已释放。临时Service库已清理，用户原库/进程未改动；详细阶段证据与15文件完整路径见W5-D3验收报告。
+- 当前新增12/修改3/删除0，暂存为空，未git add/commit/push；不进入W5-D4。解除占用后继续编译、HTTP、全量与冒烟验收，并据实更新本记录。
+
+### 2026-10-24 W5-D3：获准处理占用后的重建与完整自动化验证
+
+- 用户批准仅核实并处理PID37648/6600，要求身份不符不得停止、优先正常退出。本轮本机只读CIM复查返回两个PID均不存在，8848/5173无监听；因此无法再读取已退出进程的路径/命令行，未对它们发送退出或Stop-Process，不推测退出时间、原因。没有批量停止或停止其他既有进程；前述LNK1168阻塞历史保留。
+- 复用现有CMake配置/依赖缓存重新执行`cmake --build backend/build --config Debug --parallel 4`：退出0，7.36秒，正式backend/build/Debug/campusfix_backend.exe成功链接，无编译/链接警告；无依赖下载、升级或工具链变更。
+- 定向Worker CTest 2/2通过（退出0，12.63秒）；最终`ctest --test-dir backend/build -C Debug --output-on-failure` **22/22通过，退出0，65.02秒**。Worker Service **60个SQLite/Service断言**、Worker正式HTTP **107次请求**，新纯Policy测试0。重复定向与全量执行不累加为新的用例数量。
+- 全量内同时回归W5-D1审核Service283个断言/HTTP149次、W5-D2补充Service60个断言/HTTP74次，以及W3认证/权限/迁移/seed和W4报修/查询/时间线链路，全部通过。真实HTTP使用新构建正式Drogon及独立临时库，故障注入的500是预期失败，不是假接口或Service调用替代。
+- Worker HTTP验证A/B区域列表分别仅1/2/3与4/5/6、total均3，worker mine=true仅本人；验证管理能力/范围、授权撤销与禁用Session、白名单、分页筛选、真实有效负载、容量边界、技能生效/停用/空集/证书及非法输入。最终PUT worker1更新service_area_id=3、capacity=2、skill1 level4/certified=false，SQL确认持久化，实时负载仍2、remaining=0；原账号状态/角色和工单/派单/审计历史不变。
+- Service/HTTP临时库`integrity_check=ok`、`foreign_key_check`无违规；GET及预期失败前后全库指纹一致，档案与技能写失败整笔回滚。双SQLite连接并发更新最终档案完整，不宣称没有版本字段的接口具有409乐观锁。回执/SQL快照留于被忽略的backend/build/Testing/w5d3-evidence.json；测试库关闭清理，未修改用户人工库。
+- 本轮重新启动后端及Vite后执行`scripts/smoke.ps1`：退出0，直连/代理各两次200 JSON、code/status/service/request_id均符合要求，首页200 HTML。仅清理本轮新建测试PID25572/35336；与已消失的原PID37648/6600不同。finally恢复环境变量，结束后8848/5173监听0。
+- 前端9/9认证、16/16工单及build成功沿用上一轮实测，**本轮未重跑**，既有chunk警告保留；前端代码未改，无管理员浏览器CRUD验收或截图。物理COMMIT失败、断电/磁盘满、高压、跨机器首次部署及既有内存Token/离线退出/限流风险仍未消除；完整调度过滤未提前实现。
+- 最新详细命令、三接口真实回执、进程核验和完整文件路径见docs/W5-D3-acceptance-report.md。Git仍为新增12/修改3/删除0，暂存为空，git diff --check通过，未跟踪新文件另作no-index空白检查；产物和本地数据库继续忽略。未修改冻结设计、Schema、seed、前端、W3权限或无关文件，未git add/commit/push。**W5-D3自动化验证完成，无当前构建/测试阻塞，等待用户最终功能、源码与Git完整性验收；不进入W5-D4。**

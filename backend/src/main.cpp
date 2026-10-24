@@ -3,6 +3,7 @@
 #include "controllers/HealthController.h"
 #include "controllers/AuthController.h"
 #include "controllers/WorkOrderController.h"
+#include "controllers/WorkerController.h"
 #include "infrastructure/DatabaseMigration.h"
 #include "infrastructure/DemoSeed.h"
 #include "infrastructure/AuthCrypto.h"
@@ -119,6 +120,8 @@ int main(int argc, char *argv[])
         campusfix::registerAuthController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         campusfix::registerWorkOrderController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
+        campusfix::registerWorkerController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         drogon::app().addListener("127.0.0.1", port);
         drogon::app().run();

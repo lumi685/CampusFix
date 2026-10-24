@@ -35,6 +35,8 @@ add_library(campusfix_database STATIC
     src/repositories/ReviewRepository.cpp
     src/services/WorkOrderReviewService.cpp
     src/services/WorkOrderEditService.cpp
+    src/repositories/WorkerRepository.cpp
+    src/services/WorkerService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium)
@@ -49,6 +51,7 @@ add_library(campusfix_http STATIC
     src/controllers/WorkOrderQueryController.cpp
     src/controllers/WorkOrderTimelineController.cpp
     src/controllers/ReviewController.cpp
+    src/controllers/WorkerController.cpp
 )
 target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database)
 add_executable(campusfix_backend src/main.cpp)
@@ -66,6 +69,21 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_worker_test tests/integration/WorkerServiceTest.cpp)
+    target_link_libraries(campusfix_worker_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_worker_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    add_executable(campusfix_worker_http_fixture tests/integration/WorkerHttpFixture.cpp)
+    target_link_libraries(campusfix_worker_http_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_worker_test PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_worker_http_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME worker_service COMMAND campusfix_worker_test)
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME worker_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/WorkerHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>" -Fixture "$<TARGET_FILE:campusfix_worker_http_fixture>" -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations" -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        -EvidencePath "${CMAKE_CURRENT_BINARY_DIR}/Testing/w5d3-evidence.json")
+    set_tests_properties(worker_service worker_http PROPERTIES TIMEOUT 120)
     add_executable(campusfix_edit_test tests/integration/WorkOrderEditTest.cpp)
     target_link_libraries(campusfix_edit_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_edit_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
