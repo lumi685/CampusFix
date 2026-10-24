@@ -10,6 +10,10 @@
     "test:orders": "node --test tests/orders.test.js",
     "test:admin": "node --test tests/admin.test.js",
     "test:security": "node --test tests/admin-security.test.js",
+    "test:ai": "node --test tests/report-assistant.test.js",
+    "test:ai:draft": "node --test tests/report-draft.test.js",
+    "test:ai:handoff": "node --test tests/report-draft-handoff.test.js tests/report-draft-integration.test.js",
+    "test:ai:handoff:http": "node --test tests/report-draft-http.test.js",
     "test:admin:http": "node --test tests/admin-http.test.js",
     "preview": "vite preview --host 127.0.0.1"
   },

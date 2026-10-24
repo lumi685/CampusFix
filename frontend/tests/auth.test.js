@@ -67,7 +67,8 @@ test('login waits for verified /me identity before exposing protected content', 
 
 test('four role navigation uses explicit capabilities; worker retains own-report entries', () => {
   const titles = (identity) => visibleNavigation(identity).map((entry) => entry.id)
-  assert.deepEqual(titles(user('reporter')), ['home', 'my-orders', 'report-new'])
+  assert.deepEqual(titles(user('reporter')), ['home', 'my-orders', 'report-new', 'report-assistant'])
+  assert.ok(titles(user('worker')).includes('report-assistant'))
   assert.ok(titles(user('worker')).includes('worker-tasks'))
   assert.ok(titles(user('worker')).includes('my-orders'))
   assert.ok(titles(user('worker')).includes('report-new'))
