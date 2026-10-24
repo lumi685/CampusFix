@@ -1,10 +1,11 @@
 <script setup>
 import { reactive, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { authState } from '../stores/auth.js'
-import { chatWithReportAssistant } from '../api/reportAssistant.js'
+import { chatWithReportAssistant, generateReportDraft } from '../api/reportAssistant.js'
+import AiReportDraftPreview from '../components/AiReportDraftPreview.vue'
 import { reportAssistantFlow, dataDisclosure } from '../utils/reportAssistant.js'
 
-const flow = reactive(reportAssistantFlow(chatWithReportAssistant))
+const flow = reactive(reportAssistantFlow(chatWithReportAssistant, generateReportDraft))
 const transcript = ref(null)
 watch(() => [flow.messages.length, flow.busy], async () => {
   await nextTick()
@@ -18,6 +19,7 @@ function keydown(event) {
   }
 }
 const clear = () => flow.clear()
+const copy = () => flow.copyDraft((text) => navigator.clipboard.writeText(text))
 onMounted(() => window.addEventListener('pagehide', clear))
 onBeforeUnmount(() => { window.removeEventListener('pagehide', clear); flow.clear() })
 </script>
@@ -44,14 +46,20 @@ onBeforeUnmount(() => { window.removeEventListener('pagehide', clear); flow.clea
       <el-button :disabled="flow.busy" @click="flow.editFailed()">修改后再发送</el-button>
       <span>不会自动重试，也不会自动提交报修。</span>
     </div>
-    <label class="disclosure"><input v-model="flow.consent" type="checkbox" :disabled="flow.busy">我已阅读并同意：{{ dataDisclosure }}</label>
+    <label class="disclosure"><input v-model="flow.consent" type="checkbox" :disabled="flow.busy || flow.draftBusy">我已阅读并同意：{{ dataDisclosure }}</label>
     <label for="assistant-input" class="input-label">描述故障（每条最多1500个字符）</label>
-    <el-input id="assistant-input" v-model="flow.input" type="textarea" :rows="4" :disabled="flow.busy || flow.failed" placeholder="描述故障；Enter发送，Shift+Enter换行" @keydown="keydown" />
+    <el-input id="assistant-input" v-model="flow.input" type="textarea" :rows="4" :disabled="flow.busy || flow.failed || flow.draftBusy" placeholder="描述故障；Enter发送，Shift+Enter换行" @keydown="keydown" />
     <div class="actions">
-      <el-button type="primary" :loading="flow.busy" :disabled="!flow.consent || flow.busy || flow.failed || !flow.input.trim()" @click="flow.send()">发送</el-button>
+      <el-button type="primary" :loading="flow.busy" :disabled="!flow.consent || flow.busy || flow.failed || flow.draftBusy || !flow.input.trim()" @click="flow.send()">发送</el-button>
+      <el-button :loading="flow.draftBusy" :disabled="!flow.canGenerateDraft" @click="flow.generateDraft()">生成报修建议</el-button>
       <el-button @click="flow.clear()">清空对话</el-button>
       <small>清空仅清除本地上下文，不能撤回已经发送给服务商的数据或费用。</small>
     </div>
+    <p class="retention">建议基于当前保留的对话内容生成，请检查是否遗漏较早的信息。输入框中尚未发送的文字不参与整理。</p>
+    <p v-if="flow.draftBusy" role="status">正在整理报修建议…</p>
+    <el-alert v-if="flow.draftError" :title="flow.draftError" type="error" :closable="false" />
+    <el-button v-if="flow.draftBusy" @click="flow.cancelDraft()">取消等待建议</el-button>
+    <AiReportDraftPreview v-if="flow.draft" :model-value="flow.draft" :stale="flow.draftStale" :busy="flow.busy || flow.draftBusy" :can-generate="flow.canGenerateDraft" :copy-notice="flow.copyNotice" @update:model-value="flow.editDraft($event)" @copy="copy" @regenerate="flow.generateDraft()" @cancel="flow.cancelDraft()" />
   </main>
 </template>
 

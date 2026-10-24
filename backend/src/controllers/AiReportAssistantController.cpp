@@ -2,6 +2,7 @@
 #include "middleware/AuthGuard.h"
 #include "infrastructure/AuthCrypto.h"
 #include "infrastructure/ChatCompletionsProvider.h"
+#include "services/AiDraftService.h"
 #include "common/ResponseUtils.h"
 #include <trantor/utils/ConcurrentTaskQueue.h>
 
@@ -16,14 +17,15 @@ struct AssistantRuntime {
 };
 void respond(HttpCallback &callback,const drogon::HttpResponsePtr &response,const std::string &rid) {
     response->addHeader("Cache-Control","no-store");
-    LOG_INFO<<"AI chat http="<<response->statusCode()<<" request_id="<<rid;
+    LOG_INFO<<"AI request http="<<response->statusCode()<<" request_id="<<rid;
     callback(response);
 }
 }
 void registerAiReportAssistantController(const std::filesystem::path &path) {
     auto runtime=std::make_shared<AssistantRuntime>();
-    drogon::app().registerHandler("/api/ai/report-assistant/chat",authenticated(path,
-        [runtime](const drogon::HttpRequestPtr &request,HttpCallback &&callback) {
+    for(const bool draft:{false,true}) {
+    drogon::app().registerHandler(draft?"/api/ai/report-assistant/draft":"/api/ai/report-assistant/chat",authenticated(path,
+        [runtime,draft](const drogon::HttpRequestPtr &request,HttpCallback &&callback) {
             const auto identity=requestIdentity(request);const auto rid=identity->requestId;
             try {
                 if(identity->role!="reporter"&&identity->role!="worker")
@@ -32,14 +34,16 @@ void registerAiReportAssistantController(const std::filesystem::path &path) {
                 const auto type=request->getHeader("Content-Type");
                 if(type!="application/json"&&type!="application/json; charset=utf-8"&&type!="application/json;charset=utf-8")
                     throw AiError(415,"AI_UNSUPPORTED_MEDIA_TYPE","JSON content type is required");
-                const auto messages=parseAiMessages(std::string(request->body()));
+                const auto messages=parseAiConversation(std::string(request->body()),draft?AiConversation::Draft:AiConversation::Chat);
                 if(!runtime->config.valid())throw AiError(503,"AI_NOT_CONFIGURED","AI service is not configured");
                 const auto lease=runtime->limits.acquire(tokenDigest(bearerToken(request)));
                 // No Token, user identity, database path or conversation is logged or sent as metadata.
-                runtime->workers.runTaskInQueue([runtimePtr=runtime.get(),messages,lease,callback=std::move(callback),rid]() mutable {
+                runtime->workers.runTaskInQueue([runtimePtr=runtime.get(),messages,lease,callback=std::move(callback),rid,draft]() mutable {
                     drogon::HttpResponsePtr response;
                     try {
-                        Json::Value data;data["reply"]=runtimePtr->provider.reply(messages);
+                        Json::Value data;
+                        if(draft)data=AiDraftService(runtimePtr->provider).generate(messages);
+                        else data["reply"]=runtimePtr->provider.reply(messages);
                         response=successResponse(data,rid);
                     }catch(const AiError &e){response=errorResponse(static_cast<drogon::HttpStatusCode>(e.status),e.code,e.what(),rid);}
                     catch(...){response=errorResponse(drogon::k502BadGateway,"AI_UPSTREAM_UNAVAILABLE","AI request failed",rid);}
@@ -48,5 +52,6 @@ void registerAiReportAssistantController(const std::filesystem::path &path) {
             }catch(const AiError &e){respond(callback,errorResponse(static_cast<drogon::HttpStatusCode>(e.status),e.code,e.what(),rid),rid);}
             catch(...){respond(callback,errorResponse(drogon::k500InternalServerError,"INTERNAL_ERROR","AI request failed",rid),rid);}
         }),{drogon::Post});
+    }
 }
 }

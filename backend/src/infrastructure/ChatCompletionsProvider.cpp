@@ -30,9 +30,22 @@ void check(BOOL ok) {
     if(GetLastError()==ERROR_WINHTTP_TIMEOUT)throw AiError(504,"AI_UPSTREAM_TIMEOUT","AI provider timed out");
     throw AiError(502,"AI_UPSTREAM_UNAVAILABLE","AI provider connection failed");
 }
-[[noreturn]] void invalidReply() {throw AiError(502,"AI_INVALID_RESPONSE","AI provider returned an invalid reply");}
+[[noreturn]] void invalidReply(bool structured) {
+    throw AiError(502,structured?"AI_DRAFT_INVALID_RESPONSE":"AI_INVALID_RESPONSE","AI provider returned an invalid reply");
+}
+bool containsSecret(const Json::Value &value,const std::string &secret) {
+    if(value.isString())return value.asString().find(secret)!=std::string::npos;
+    if(value.isArray()||value.isObject())for(const auto &child:value)if(containsSecret(child,secret))return true;
+    return false;
+}
 }
 std::string ChatCompletionsProvider::reply(const std::vector<ChatMessage> &messages) {
+    return complete(messages,false);
+}
+std::string ChatCompletionsProvider::draftContent(const std::vector<ChatMessage> &messages) {
+    return complete(messages,true);
+}
+std::string ChatCompletionsProvider::complete(const std::vector<ChatMessage> &messages,bool structured) {
     if(!config_.valid())throw AiError(503,"AI_NOT_CONFIGURED","AI service is not configured");
     const auto url=wide(config_.baseUrl+"/chat/completions");
     URL_COMPONENTS components{};components.dwStructSize=sizeof(components);
@@ -45,13 +58,19 @@ std::string ChatCompletionsProvider::reply(const std::vector<ChatMessage> &messa
         throw AiError(503,"AI_NOT_CONFIGURED","AI configuration is invalid");
     const std::wstring path(components.lpszUrlPath,components.dwUrlPathLength);
     Json::Value payload(Json::objectValue);payload["model"]=config_.model;
-    payload["stream"]=false;payload["max_tokens"]=512;
+    payload["stream"]=false;payload["max_tokens"]=structured?4096:512;
+    if(structured)payload["response_format"]["type"]="json_object";
     // Explicitly disable thinking for this short, non-tool text assistant (DeepSeek protocol).
     payload["thinking"]["type"]="disabled";
     payload["messages"]=Json::arrayValue;
-    Json::Value system;system["role"]="system";system["content"]=aiSystemPrompt;
+    Json::Value system;system["role"]="system";system["content"]=structured?aiDraftSystemPrompt:aiSystemPrompt;
     payload["messages"].append(system);
     for(const auto &m:messages){Json::Value item;item["role"]=m.role;item["content"]=m.content;payload["messages"].append(item);}
+    if(structured) {
+        Json::Value instruction;instruction["role"]="user";
+        instruction["content"]="请仅整理上述当前保留对话中的实际故障信息，按照系统约定返回六字段 JSON 建议对象；未知信息用 null，不创建工单。";
+        payload["messages"].append(instruction);
+    }
     Json::StreamWriterBuilder writer;writer["indentation"]="";
     const auto body=Json::writeString(writer,payload);
     InternetHandle session(WinHttpOpen(L"CampusFix/1.2",secure?WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY:WINHTTP_ACCESS_TYPE_NO_PROXY,
@@ -98,14 +117,20 @@ std::string ChatCompletionsProvider::reply(const std::vector<ChatMessage> &messa
     parser["allowTrailingCommas"]=false;
     Json::Value root;std::string error;const std::unique_ptr<Json::CharReader> reader(parser.newCharReader());
     if(!reader->parse(received.data(),received.data()+received.size(),&root,&error)||!root.isObject()||
-        !root["choices"].isArray()||root["choices"].size()!=1)invalidReply();
+        !root["choices"].isArray()||root["choices"].size()!=1)invalidReply(structured);
     const auto &choice=root["choices"][0];
     if(!choice.isObject()||!choice["finish_reason"].isString()||choice["finish_reason"].asString()!="stop"||
         !choice["message"].isObject()||!choice["message"]["role"].isString()||choice["message"]["role"].asString()!="assistant"||
-        !choice["message"]["content"].isString()||choice["message"].isMember("tool_calls"))invalidReply();
+        !choice["message"]["content"].isString()||choice["message"].isMember("tool_calls"))invalidReply(structured);
     const auto reply=choice["message"]["content"].asString();
-    try {if(aiTextLength(reply)>1500)invalidReply();}catch(const AiError &){invalidReply();}
-    if(reply.find(config_.apiKey)!=std::string::npos)invalidReply();
+    try {const auto length=aiTextLength(reply);if(!structured&&length>1500)invalidReply(false);}catch(const AiError &){invalidReply(structured);}
+    if(reply.find(config_.apiKey)!=std::string::npos)invalidReply(structured);
+    if(structured) {
+        // Inner JSON escapes are decoded again before reaching the browser.
+        // Do not let that second decoding bypass the credential output guard.
+        try {if(containsSecret(parseAiJson(reply),config_.apiKey))invalidReply(true);}
+        catch(...){invalidReply(true);}
+    }
     return reply;
 }
 }

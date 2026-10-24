@@ -20,6 +20,9 @@ struct AiError : std::runtime_error {
 };
 struct ChatMessage { std::string role, content; };
 std::size_t aiTextLength(const std::string &text);
+enum class AiConversation { Chat, Draft };
+Json::Value parseAiJson(const std::string &body);
+std::vector<ChatMessage> parseAiConversation(const std::string &body, AiConversation purpose);
 std::vector<ChatMessage> parseAiMessages(const std::string &body);
 struct LlmConfig {
     std::string baseUrl, apiKey, model;
@@ -31,6 +34,7 @@ class ModelProvider {
 public:
     virtual ~ModelProvider() = default;
     virtual std::string reply(const std::vector<ChatMessage> &messages) = 0;
+    virtual std::string draftContent(const std::vector<ChatMessage> &messages) = 0;
 };
 // No database dependency. Quotas are process-local and include failed attempts.
 class AiRequestLimits {

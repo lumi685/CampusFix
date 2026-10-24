@@ -41,8 +41,7 @@ std::size_t aiTextLength(const std::string &s) {
     if (!content) invalid();
     return count;
 }
-std::vector<ChatMessage> parseAiMessages(const std::string &body) {
-    if (body.size()>65536) throw AiError(413,"AI_REQUEST_TOO_LARGE","Conversation is too large");
+Json::Value parseAiJson(const std::string &body) {
     Json::CharReaderBuilder builder;
     builder["collectComments"]=false;builder["allowComments"]=false;
     builder["rejectDupKeys"]=true;builder["failIfExtra"]=true;
@@ -52,6 +51,11 @@ std::vector<ChatMessage> parseAiMessages(const std::string &body) {
     const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
     if (!reader->parse(body.data(),body.data()+body.size(),&root,&error))
         throw AiError(400,"MALFORMED_REQUEST","Invalid JSON");
+    return root;
+}
+std::vector<ChatMessage> parseAiConversation(const std::string &body, AiConversation purpose) {
+    if (body.size()>65536) throw AiError(413,"AI_REQUEST_TOO_LARGE","Conversation is too large");
+    const auto root=parseAiJson(body);
     if (!root.isObject()||root.size()!=1||!root.isMember("messages")||!root["messages"].isArray()) invalid();
     const auto &messages=root["messages"];
     if (messages.empty()) invalid();
@@ -67,8 +71,11 @@ std::vector<ChatMessage> parseAiMessages(const std::string &body) {
         if (total>9000) throw AiError(413,"AI_REQUEST_TOO_LARGE","Conversation is too large");
         result.push_back({role,text});
     }
-    if (result.front().role!="user"||result.back().role!="user") invalid();
+    if (result.front().role!="user"||(purpose==AiConversation::Chat&&result.back().role!="user")) invalid();
     return result;
+}
+std::vector<ChatMessage> parseAiMessages(const std::string &body) {
+    return parseAiConversation(body,AiConversation::Chat);
 }
 LlmConfig LlmConfig::environment() {
     LlmConfig c{env("CAMPUSFIX_LLM_BASE_URL"),env("CAMPUSFIX_LLM_API_KEY"),env("CAMPUSFIX_LLM_MODEL")};

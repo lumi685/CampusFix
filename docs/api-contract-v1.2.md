@@ -62,4 +62,45 @@ AI 模块没有数据库操作和工单状态转换，不写 status_logs，不�
 - `ai_chat_validation_limits`：C++ 严格输入及限额，296个断言。
 - `ai_chat_http`：独立临时 SQLite + 正式 Drogon + 本地独立假模型，63次 AI-01 HTTP，29次上游调用；包括上下文顺序、安全错误、无写入、角色、并发及额度。不是 DeepSeek 验收。
 - `frontend/tests/report-assistant.test.js`：12项流程/API/角色/SSR转义/真实SFC清理测试，非浏览器 E2E。
-- 真实 DeepSeek 六场景、HTTPS真实服务链路及浏览器390px验收：待用户执行，未验证。
+- AI-D1真实DeepSeek六场景已由用户确认通过，见AI-D1验收报告；390px等未反馈专项不自动视为通过。上述测试数字为AI-D1基线，AI-D2结果独立记录。
+
+## AI-02 根据当前保留对话生成文字报修建议
+
+- FR-AI-02；`POST /api/ai/report-assistant/draft`，同一AuthGuard与统一响应。不是原API-02退出接口，不改API-01～33或AI-01。
+- 仅reporter/worker，有效Bearer Session；管理授权不授予使用权。Content-Type与查询参数规则同AI-01。
+- 根对象只有messages，条目恰好role/content。类型、Unicode、空白、未知字段、JSON重复键及大小限制同AI-01；第一条user，最后允许user或assistant。不能上传URL、模型、Key、system prompt、授权、工单ID或工具消息。
+
+```json
+{"messages":[{"role":"user","content":"宿舍洗手池下方排水管漏水"},{"role":"assistant","content":"请停止使用并注意防滑，具体楼栋房号待补充。"}]}
+```
+
+成功200（结构示例，不是本轮真实模型回执）：
+
+```json
+{"code":0,"message":"success","data":{"draft":{"title":"宿舍洗手池下方排水管漏水","description":"用户反映洗手池下方排水管漏水，具体楼栋与房号待补充。","category_hint":"给排水","location_hint":"宿舍洗手池","missing_information":["楼栋与房号"],"safety_note":"停止使用漏水设备，注意防滑。"},"requires_review":true},"request_id":"req_<server-generated>"}
+```
+
+data只含draft和服务端固定true的requires_review。draft是**未受信的建议文本DTO，不是WorkOrder**；不包含id、category_id、location_id、状态或执行指令。
+
+| 必需字段 | 类型与上限（Unicode标量） |
+|---|---|
+| title | null或非空白字符串，120 |
+| description | null或非空白字符串，2000 |
+| category_hint | null或非空白字符串，120；不得作为正式分类ID |
+| location_hint | null或非空白字符串，200；不得作为正式位置ID |
+| missing_information | 字符串数组，可空、最多5条；每条非空白且≤120，不允许null条目 |
+| safety_note | null或非空白字符串，300 |
+
+六字段必须全部出现，未知/缺失/错类型、非法Unicode/控制字符、超限、空对象、Markdown围栏、截断或尾随数据均拒绝。未知信息应null而非空白字符串。模型若返回requires_review、数据库ID等额外字段也拒绝。外层工具调用/非stop/空输出不视为成功。不返回上游原文、思维链或异常细节。
+
+新增错误：502 `AI_DRAFT_INVALID_RESPONSE`，统一data=null，固定安全文案和真实request_id。其余输入400/401/403/413/415/422、额度429、配置503、上游401/403映射502、上游429映射503、超时504、连接/5xx502及接收64KiB超限502均复用AI-01。接口Cache-Control:no-store，不自动重试。
+
+AI-01和AI-02共享同一Session/进程额度与并发槽，不能切换路由绕过。AI-02 max_tokens=4096、JSON模式及report-draft-v1提示词只在此模式生效；AI-01仍512 token、1500字、最后user。客户端保留窗口允许assistant结尾，但不会将此放宽传给AI-01。
+
+### AI-02 数据与测试边界
+
+AI模块不读业务表、不持久化建议、不开事务、不写work_orders/status_logs等表；AuthGuard仍必要只读认证，不宣称整个请求无数据库访问。生成、取消、复制或跳转普通报修均不调用工单创建/编辑/提交接口；分类与位置需要后续正式表单真实选择，AI-D2不预填。
+
+测试：ai_draft_service（严格字段/Unicode/服务编排）、ai_draft_http（独立假模型+正式HTTP+SQLite前后快照）、frontend/tests/report-draft.test.js（流程/API/真实SFC/SSR，非浏览器）。AI-D1原测试独立回归。实现阶段AI-D2真实DeepSeek A～H及浏览器专项曾待用户人工验收，不能用AI-D1人工结果替代；此前自动化记录保留，本次仅同步状态、不重跑测试。
+
+验收状态同步（2026-10-24）：用户已在真实 DeepSeek 浏览器中完成 A～H 八项人工验收，8/8 通过。执行人为用户本人，非 Codex；未提供原始 Network、模型名、额外数据库快照等证据。390px 窄屏、剪贴板权限拒绝等未单独反馈的专项仍未验证。

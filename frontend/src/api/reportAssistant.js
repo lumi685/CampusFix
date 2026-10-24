@@ -9,3 +9,10 @@ export async function chatWithReportAssistant(messages, signal) {
   }
   return data.data.reply
 }
+
+export async function generateReportDraft(messages, signal) {
+  const { data } = await apiClient.post('/ai/report-assistant/draft', { messages }, {
+    authRequired: true, timeout: 185000, signal,
+  })
+  return data.data
+}

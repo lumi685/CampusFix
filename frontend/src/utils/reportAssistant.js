@@ -11,17 +11,20 @@ export function messageLength(text) {
   return Array.from(text).length
 }
 
-export function chatContext(messages) {
+function conversationContext(messages, allowAssistantEnd) {
   const result = messages.map(({ role, content }) => ({ role, content }))
   for (const m of result) {
     if (!['user', 'assistant'].includes(m.role) || messageLength(m.content) > 1500) throw new Error('每条消息最多 1500 个字符')
   }
-  if (!result.length || result.at(-1).role !== 'user') throw new Error('请先描述故障')
+  if (!result.length || (!allowAssistantEnd && result.at(-1).role !== 'user')) throw new Error('请先描述故障')
   // Keep a valid recent conversation, never cut the current message or the system prompt.
-  while (result.length > 12 || result[0]?.role !== 'user' ||
-      result.reduce((sum, m) => sum + Array.from(m.content).length, 0) > 9000) result.shift()
+  while (result.length && (result.length > 12 || result[0]?.role !== 'user' ||
+      result.reduce((sum, m) => sum + Array.from(m.content).length, 0) > 9000)) result.shift()
+  if (!result.length) throw new Error('当前保留的上下文缺少可用用户描述，请补充故障后再生成')
   return result
 }
+export function chatContext(messages) { return conversationContext(messages, false) }
+export function draftContext(messages) { return conversationContext(messages, true) }
 
 export function assistantError(error) {
   const messages = {
@@ -30,6 +33,7 @@ export function assistantError(error) {
     AI_PROVIDER_RATE_LIMITED: '模型服务繁忙，请稍后手动重试。',
     AI_PROVIDER_AUTH_FAILED: '模型服务配置异常，请联系平台维护人员或普通报修。',
     AI_INVALID_RESPONSE: '模型未返回完整有效的文字回复，请手动重试或普通报修。',
+    AI_DRAFT_INVALID_RESPONSE: '模型未返回有效的报修建议，请手动重新生成或普通报修。',
     AI_RESPONSE_TOO_LARGE: '模型回复超出限制，请手动重试或普通报修。',
     AI_REQUEST_TOO_LARGE: '对话内容超出限制，请缩短内容或清空对话。',
     AI_VALIDATION_ERROR: '对话内容不符合要求，请检查输入。',
@@ -45,27 +49,65 @@ export function assistantError(error) {
 }
 
 // Page-scoped state, deliberately no persistence. Tests inject only the transport.
-export function reportAssistantFlow(request) {
-  let epoch = 0, abort
+export function reportAssistantFlow(request, draftRequest) {
+  let epoch = 0, abort, draftEpoch = 0, draftAbort
   return {
     consent: false, input: '', messages: [], busy: false, error: '', failed: false,
+    draft: null, draftBusy: false, draftStale: false, draftError: '', copyNotice: '',
+    get canGenerateDraft() {
+      return this.consent && !this.busy && !this.failed && !this.draftBusy &&
+        this.messages.some((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
+    },
+    invalidateDraft() {
+      ++draftEpoch; draftAbort?.abort(); draftAbort = undefined
+      this.draftBusy = false; this.draftStale = !!this.draft; this.draftError = ''; this.copyNotice = ''
+    },
+    cancelDraft() {
+      this.invalidateDraft(); this.draft = null; this.draftStale = false
+    },
+    editDraft(value) { this.draft = value; this.copyNotice = '' },
+    async generateDraft() {
+      if (!this.canGenerateDraft) return
+      this.invalidateDraft()
+      const current = ++draftEpoch
+      this.draftBusy = true; draftAbort = new AbortController()
+      try {
+        const result = checkedDraft(await draftRequest(draftContext(this.messages), draftAbort.signal))
+        if (current !== draftEpoch) return
+        this.draft = result; this.draftStale = false
+      } catch (error) { if (current === draftEpoch) this.draftError = assistantError(error) }
+      finally { if (current === draftEpoch) { this.draftBusy = false; draftAbort = undefined } }
+    },
+    async copyDraft(writeText) {
+      if (!this.draft || this.draftBusy || this.draftStale || this.busy) return
+      const current = draftEpoch, snapshot = this.draft
+      this.copyNotice = ''
+      try {
+        await writeText(draftText(snapshot))
+        if (current === draftEpoch && snapshot === this.draft) this.copyNotice = '已复制当前编辑后的建议；尚未创建或提交工单。'
+      } catch {
+        if (current === draftEpoch && snapshot === this.draft) this.copyNotice = '复制失败，建议仍保留，请手动选中文字复制。'
+      }
+    },
     async send() {
-      if (this.busy || this.failed) return
+      if (this.busy || this.failed || this.draftBusy) return
       this.error = ''
       try {
         if (!this.consent) throw new Error('请先阅读并同意第三方数据告知')
         if (messageLength(this.input) > 1500) throw new Error('每条消息最多 1500 个字符')
       } catch (error) { this.error = error.message; return }
+      this.invalidateDraft()
       this.messages.push({ role: 'user', content: this.input })
       this.messages = this.messages.slice(-12)
       this.input = ''
       await this.execute()
     },
     async retry() {
-      if (this.busy || !this.failed || !this.consent) return
+      if (this.busy || this.draftBusy || !this.failed || !this.consent) return
       await this.execute()
     },
     async execute() {
+      this.invalidateDraft()
       this.busy = true; this.failed = false; this.error = ''
       const current = ++epoch
       abort = new AbortController()
@@ -86,8 +128,42 @@ export function reportAssistantFlow(request) {
       this.failed = false; this.error = ''
     },
     clear() {
+      this.cancelDraft()
       ++epoch; abort?.abort(); abort = undefined
       this.messages = []; this.input = ''; this.error = ''; this.failed = false; this.busy = false; this.consent = false
     },
   }
+}
+
+export const draftFields = [
+  ['title', '故障标题', 120], ['description', '故障描述', 2000],
+  ['category_hint', '建议分类（仅文本，非正式分类）', 120], ['location_hint', '位置线索（非正式位置）', 200],
+  ['safety_note', '安全提示', 300],
+]
+export function checkedDraft(data) {
+  if (!data || data.requires_review !== true || !data.draft || Array.isArray(data.draft) ||
+      Object.keys(data.draft).length !== 6) throw new Error('Invalid draft response')
+  const result = {}
+  for (const [field, , max] of draftFields) {
+    const value = data.draft[field]
+    if (value !== null && (typeof value !== 'string' || messageLength(value) > max)) throw new Error('Invalid draft response')
+    result[field] = value === null ? '' : value
+  }
+  const missing = data.draft.missing_information
+  if (!Array.isArray(missing) || missing.length > 5 || missing.some((text) => messageLength(text) > 120)) throw new Error('Invalid draft response')
+  result.missing_information = [...missing]
+  return result
+}
+export function draftText(draft) {
+  const lines = ['AI 建议，尚未创建或提交工单；请自行核对。']
+  for (const [field, label, max] of draftFields) {
+    const value = draft[field]
+    if (typeof value !== 'string' || (value !== '' && messageLength(value) > max)) throw new Error('Invalid edited field')
+    lines.push(`${label}：${value || '（未填写）'}`)
+  }
+  if (!Array.isArray(draft.missing_information) || draft.missing_information.length > 5) throw new Error('Invalid missing information')
+  const missing = draft.missing_information.filter((text) => text !== '')
+  if (missing.some((text) => messageLength(text) > 120)) throw new Error('Invalid missing information')
+  lines.push(`待补充信息：${missing.length ? missing.join('；') : '（无）'}`)
+  return lines.join('\n')
 }

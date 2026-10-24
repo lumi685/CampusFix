@@ -7,7 +7,9 @@ class ChatCompletionsProvider final : public ModelProvider {
 public:
     explicit ChatCompletionsProvider(LlmConfig config):config_(std::move(config)){}
     std::string reply(const std::vector<ChatMessage> &messages) override;
+    std::string draftContent(const std::vector<ChatMessage> &messages) override;
 private:
+    std::string complete(const std::vector<ChatMessage> &messages, bool structured);
     LlmConfig config_;
 };
 }

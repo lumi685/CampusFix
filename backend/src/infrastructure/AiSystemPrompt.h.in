@@ -1,4 +1,5 @@
 #pragma once
 namespace campusfix {
 inline constexpr const char *aiSystemPrompt = R"CFPROMPT(@CAMPUSFIX_AI_PROMPT@)CFPROMPT";
+inline constexpr const char *aiDraftSystemPrompt = R"CFDRAFT(@CAMPUSFIX_AI_DRAFT_PROMPT@)CFDRAFT";
 }
