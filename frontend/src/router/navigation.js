@@ -7,6 +7,7 @@ export const navigation = [
   { id: 'home', path: '/home', title: '身份与授权', roles: Object.keys(roleLabels) },
   { id: 'my-orders', path: '/my-orders', title: '我提交的报修', roles: ['reporter', 'worker'] },
   { id: 'report-new', path: '/report/new', title: '提交报修', roles: ['reporter', 'worker'] },
+  { id: 'report-assistant', path: '/report/assistant', title: 'AI 辅助报修', roles: ['reporter', 'worker'] },
   { id: 'worker-tasks', path: '/worker/tasks', title: '待处理任务', roles: ['worker'] },
   { id: 'worker-history', path: '/worker/history', title: '维修记录', roles: ['worker'] },
   { id: 'worker-profile', path: '/worker/profile', title: '本人维修档案', roles: ['worker'] },

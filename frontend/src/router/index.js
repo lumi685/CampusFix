@@ -6,6 +6,7 @@ import HomeView from '../views/HomeView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import ReportNewView from '../views/ReportNewView.vue'
+import ReportAssistantView from '../views/ReportAssistantView.vue'
 import MyOrdersView from '../views/MyOrdersView.vue'
 import OrderDetailView from '../views/OrderDetailView.vue'
 import AdminOrdersView from '../views/AdminOrdersView.vue'
@@ -25,7 +26,7 @@ const router = createRouter({
         { path: '', name: 'welcome', component: WelcomeView },
         ...navigation.map((entry) => ({
           path: entry.path.slice(1), name: entry.id,
-          component: ({ 'admin-orders': AdminOrdersView, 'admin-review': AdminReviewView, 'admin-workers': AdminWorkersView })[entry.id] || (entry.id === 'report-new' ? ReportNewView : entry.id === 'my-orders' ? MyOrdersView : ['home', 'system'].includes(entry.id) ? HomeView : PlaceholderView),
+          component: ({ 'report-assistant': ReportAssistantView, 'admin-orders': AdminOrdersView, 'admin-review': AdminReviewView, 'admin-workers': AdminWorkersView })[entry.id] || (entry.id === 'report-new' ? ReportNewView : entry.id === 'my-orders' ? MyOrdersView : ['home', 'system'].includes(entry.id) ? HomeView : PlaceholderView),
           meta: { requiresAuth: true, entryId: entry.id, title: entry.title },
         })),
         { path: 'orders/:id', name: 'order-detail', component: OrderDetailView, meta: { requiresAuth: true, entryId: 'my-orders', title: '工单详情' } },

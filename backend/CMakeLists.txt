@@ -11,6 +11,19 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(jsoncpp CONFIG REQUIRED) # Already installed as a Drogon dependency; reuse its safe JSON parser.
 
+if(NOT WIN32)
+    message(FATAL_ERROR "V1.2 model transport currently requires Windows WinHTTP")
+endif()
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/prompts/report-assistant-v1.txt" CAMPUSFIX_AI_PROMPT)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/prompts/report-assistant-v1.txt")
+configure_file(src/infrastructure/AiSystemPrompt.h.in generated/AiSystemPrompt.h @ONLY)
+add_library(campusfix_ai STATIC src/services/AiChatService.cpp src/infrastructure/ChatCompletionsProvider.cpp)
+target_include_directories(campusfix_ai PUBLIC src PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(campusfix_ai PUBLIC JsonCpp::JsonCpp PRIVATE winhttp)
+if(MSVC)
+    target_compile_options(campusfix_ai PRIVATE /W4 /permissive- /utf-8)
+endif()
+
 add_library(campusfix_database STATIC
     src/repositories/CatalogRepository.cpp
     src/services/CatalogService.cpp
@@ -43,6 +56,7 @@ target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 uno
 target_link_libraries(campusfix_database PRIVATE JsonCpp::JsonCpp)
 
 add_library(campusfix_http STATIC
+    src/controllers/AiReportAssistantController.cpp
     src/controllers/CatalogController.cpp
     src/controllers/HealthController.cpp
     src/controllers/AuthController.cpp
@@ -53,7 +67,7 @@ add_library(campusfix_http STATIC
     src/controllers/ReviewController.cpp
     src/controllers/WorkerController.cpp
 )
-target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database)
+target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database campusfix_ai)
 add_executable(campusfix_backend src/main.cpp)
 
 target_link_libraries(campusfix_backend
@@ -69,6 +83,22 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_ai_test tests/unit/AiChatTest.cpp)
+    target_link_libraries(campusfix_ai_test PRIVATE campusfix_ai)
+    add_executable(campusfix_ai_fixture tests/integration/AiChatFixture.cpp)
+    target_link_libraries(campusfix_ai_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_ai_test PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_ai_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
+    find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
+    add_test(NAME ai_chat_http COMMAND "${CAMPUSFIX_NODE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/AiChatHttpTest.mjs"
+        "$<TARGET_FILE:campusfix_backend>" "$<TARGET_FILE:campusfix_ai_fixture>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/migrations" "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        "${CMAKE_CURRENT_BINARY_DIR}/Testing/v1.2-ai-evidence.json")
+    set_tests_properties(ai_chat_http PROPERTIES TIMEOUT 90)
     add_executable(campusfix_w5d5_fixture tests/integration/W5D5SecurityFixture.cpp)
     target_link_libraries(campusfix_w5d5_fixture PRIVATE campusfix_database Drogon::Drogon)
     if(MSVC)
