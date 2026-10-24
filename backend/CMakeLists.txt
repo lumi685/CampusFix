@@ -62,6 +62,18 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_report_acceptance_fixture tests/integration/ReportAcceptanceFixture.cpp)
+    target_link_libraries(campusfix_report_acceptance_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_report_acceptance_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME report_acceptance_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ReportAcceptanceHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>" -Fixture "$<TARGET_FILE:campusfix_report_acceptance_fixture>"
+        -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations" -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        -EvidencePath "${CMAKE_CURRENT_BINARY_DIR}/Testing/w4d5-evidence.json")
+    set_tests_properties(report_acceptance_http PROPERTIES TIMEOUT 90)
     add_executable(campusfix_catalog_test tests/integration/CatalogTest.cpp)
     target_link_libraries(campusfix_catalog_test PRIVATE campusfix_database Drogon::Drogon)
     target_compile_definitions(campusfix_catalog_test PRIVATE

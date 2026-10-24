@@ -341,3 +341,55 @@
   - `G:/A_Study/CppProject/CampusFix/docs/W4-D4-manual-acceptance.md`：记录用户失败及待复验项。
   - `G:/A_Study/CppProject/CampusFix/docs/progress-log.md`：本轮实测补记，保留上轮历史。
 - 因main.js原先不在27文件中，当前W4-D4总范围为28个：新增19、修改9、删除0，另两份原有W1-D3未跟踪交接文件保持原样，不纳入。没有git add/commit/push，不进入W4-D5；最终空白检查/暂存区核对结果见交付报告。状态：代码修复及自动化通过，人工验收仍未通过、等待复验。
+
+## 2026-10-23 W4-D5：真实报修HTTP/SQLite集成与证据归档（浏览器详细证据待补）
+
+- 起始HEAD与本地origin/main均为`d4d2d72`，工作区干净；W4-D4两个实际提交为`c1f3881`（目录/页面相关17文件）与`d4d2d72`（遗漏前端补全11文件）。没有fetch，不声称独立联网确认了GitHub此刻HEAD。当前实际未发现两份旧W1-D3交接文件，不在跟踪或本轮变更中，未执行删除/恢复。
+- 用户W4-D5任务明确补充：Element Plus修复后四类控件正常显示、浏览器功能通过、F12 Network提交及获取未发现请求错误。本轮已更新W4-D4人工文档标题并追加该后续确认，保留此前失败→修复→自动化→用户确认的发生顺序；用户未给精确操作时间/状态码/截图，不虚构这些证据。W4-D4概括人工确认不等于W4-D5逐项浏览器验收已完成。
+- 对应FR-002/003/004、TC-ORDER-01～06、API-01～11已实现子集（不含API-07）、T-01/02及既有T-05回归、D-011/012/017。本轮仅新增测试与文档，不改冻结契约、Schema、seed、业务源码、权限规则或依赖，也未开发W5/编辑/取消/上传。
+- 新增ReportAcceptanceFixture和ReportAcceptanceHttpTest并注册第16项CTest。复用原迁移、seed、数据库封装和原虚构权限夹具，拒绝覆盖既有数据库，六个具名虚构账号分别生成随机安全密码并通过既有设置/启用函数，仅在独立临时库使用。真实login/me取得会话；返回Token在本地证据中删除，密码/Token不写入服务日志；临时库/凭据/日志在finally清理。没有正式服务中的测试授权/故障HTTP接口。
+- 缺口补全：真实登录→动态目录逐级选择→创建201并独立SQL检查DRAFT/version1/null编号/创建日志→错误版本409整库不变→提交200并独立SQL核对待审核/version2/唯一编号/提交日志→本人分页/组合筛选与total精确SQL对照→详情/时间线逐字段匹配与GET整库指纹不变→退出200/旧Token401→停服务/重启/重新登录后原状态/版本/编号/事件ID及时间不变。worker另跑本人报修链路，reported与assigned隔离。
+- 新集成最终实测 **91次生产HTTP请求、20次独立SQLite快照**；状态统计200×48、201×3、401×5、403×4、404×3、409×5、422×21、500×2。两次500为预期故障注入：创建日志INSERT失败整体回滚；提交日志INSERT失败使状态/版本/流水/日志整体回滚，关闭注入后使用同一草稿成功，只有一个编号和两日志，重复submit409无写入。回滚对比完整SQLite序列化摘要，不仅比较响应。
+- 本轮一次正式实测：reporter order9/reporter_id3/WX202610230001、worker order10/reporter_id6/WX202610230002、重试order11/reporter_id3/WX202610230003；均PENDING_REVIEW/version2，共新增3单、流水累计3。每单恰好ORDER_CREATED与ORDER_SUBMITTED，actor等于当前认证用户，request_id与对应HTTP请求一致，时间分别等于created_at/submitted_at。详细实际UTC、日志ID、request_id及响应见`docs/W4-D5-acceptance-report.md`，运行时脱敏完整证据见被忽略的`backend/build/Testing/w4d5-evidence.json`。
+- 权限/非法输入：匿名401、跨报修人404、管理角色创建403、worker可见派单不授予原报修人提交403，管理区域与sysadmin能力自己的范围、撤权后详情404/managed403、内部权限范围错配不返备注。缺字段、无效/停用选项、错误紧急度、长度越界、伪造身份及非法版本422。新测试与原W3/W4授权/时间线/字段白名单测试共同覆盖，不把SQLite夹具或Policy说成尚未实现的业务HTTP。
+- 调试记录：新脚本首次错误假定reporter03没有历史（seed实际有一单），改为合法CLOSED筛选空列表；第二次误将已可见但无提交权限的worker任务期待404，依冻结语义修正为403。两处均为测试预期错误，不修改生产业务迁就测试。最终没有未解决的自动化失败。
+- 实际构建：使用CMakeCache中的本机VS CMake执行 `cmake --build backend/build --config Debug --parallel 4`，本机MSVC Debug退出0、未见警告；CMake自动配置复用缓存依赖，无下载或版本变更。
+- 实际全量：`ctest --test-dir backend/build -C Debug --output-on-failure` **16/16通过、退出0、29.50秒**，新集成约7.50秒，原W3认证/RBAC/数据库和W4-D1～D4测试均通过。SQLite20次快照integrity_check=ok、foreign_key_check违规0；原Service的UPDATE/日志回滚及编号并发回归继续通过。
+- 前端实际命令：frontend目录 `npm.cmd run test:auth` **9/9过、退出0**，新增角色切换时旧user/Token/授权清理、worker新身份和菜单的逻辑测试；`npm.cmd run test:orders` **7/7过、退出0**；`npm.cmd run build` **成功、退出0**，本轮实际有chunk超过500kB提示（JS664.18kB/gzip220.64kB），未为本轮验收拆包/重构。上述单测有Axios adapter，不是浏览器E2E；表单失败保存同ID的前端逻辑与后端真实500重试分别验证，未在浏览器实际注入。
+- W2实际冒烟：本轮启动无数据库配置的正式后端和真实Vite，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke.ps1` **退出0**；直连/代理各两次200JSON、request_id不同及首页200通过。仅停止自建PID48184/42544；8848/5173剩余监听0，临时冒烟目录清理，未删除用户库。测试脚本的其他随机端口进程亦在finally停止。
+- 浏览器：按computer-use技能优先查询受控入口，apps=[]/browsers=[]；停止对应自动化，不重试绕过此前URL安全限制。Codex本轮浏览器实测和截图数均0。新增W4-D5人工清单与A～G截图索引，所有实际截图/精细交互状态为待用户提供；不制作/合成图片。现有演示库用于后续人工操作前仍需确认路径用途，密码继续用户隐藏输入。
+- 安全审查：生产路由集合未新增，测试工具未链接进正式服务；写事务、服务端身份、条件版本与参数绑定未变。证据脱敏、敏感字段检查、日志凭证扫描在测试实际执行通过。只读快照不跨登录/退出区间比较，避免把合法会话写入误认为GET写入。
+- 最终目标范围8文件：新增`backend/tests/integration/ReportAcceptanceFixture.cpp`、`backend/tests/integration/ReportAcceptanceHttpTest.ps1`、`docs/W4-D5-manual-acceptance.md`、`docs/W4-D5-acceptance-report.md`；修改`backend/CMakeLists.txt`、`frontend/tests/auth.test.js`、`docs/W4-D4-manual-acceptance.md`、`docs/progress-log.md`。各文件完整路径/职责见正式报告；删除0，暂存/commit/push均未执行。
+- 风险/边界：本轮未做真实浏览器选择/提交/刷新/重试/Console检查或截图审查；W4-D4用户概括通过已单独记录。未模拟物理COMMIT失败、断电、磁盘满、大压力或跨机器部署；内存Token、离线退出、完整限流风险保留。当前状态为**自动化集成与文档完成，W4-D5人工证据与最终验收待用户确认**，不进入W5。
+- 最终Git实检：status为4修改/4新增/0删除，暂存0；git diff --check退出0，新文件no-index无空白错误；仅LF→CRLF提示。生产源码/Schema/seed/冻结设计/依赖和前端业务源码差异为空，数据库及运行时证据仍忽略，凭据模式扫描无匹配，8848/5173监听0。完整路径清单和原始status见正式报告，未发现任何W4-D5范围外新增文件。
+
+## 2026-10-24 W4-D5：用户人工截图补记（结果仍待补齐）
+
+- 用户提供人工验收模板，但数据库名/Reporter与Worker编号仍为占位符，A～G仍为“通过/失败/未测”选择文字，7项附加测试均空白；不能推断为全部通过。执行主体按用户记录为项目开发者，Windows+Chrome环境；本日为补记/审阅日期，未臆造精确执行时间。
+- 在指定`backend/build/Testing/w4d5-screenshots/`实际发现并逐张目视检查8张图：A-report-form、B-filled-report、C-submitted-detail、D-my-orders、E-order-timeline、F1-worker-navigation、F2-worker-own-order、G-network-results（均PNG）。只读审阅，未移动/编辑/生成图片，没有重新操作浏览器或执行自动化测试。
+- 可见事实：A表单控件/位置四级展开/日期显示；B是worker填写页且URGENT提醒可见；C/D/E一致显示Reporter工单WX202610240002（/orders/7，待审核/version2），时间线为Demo Reporter 1创建/提交两事件，页面时间2026/10/24 10:22:19/10:22:20。F1显示demo_worker01身份及本人报修/维修任务独立入口，F2本人列表显示WX202610240001。两个编号来自图片，不是用户已填写确认；人工库名待确认，不读取或猜测数据库。
+- 证据缺口：A选“高”但C显示“普通”，不据此认定同一份未变化的表单；B是worker而非Reporter。G显示目录/列表/详情/时间线GET200，但详情名6而非Reporter工单7，没有创建201/submit200，DevTools顶部还有1条错误指示且内容未知；不宣称Console无错误或同一工单全链路Network已齐。
+- 可见截图未发现密码/Bearer/Authorization或真实私人资料，测试文字和零值电话保留；不代表检查过隐藏请求头/HAR。截图仍由build忽略，不添加到Git。详细索引、来源和未验证项已更新到人工文档和正式报告。
+- 仅编辑`docs/W4-D5-manual-acceptance.md`、`docs/W4-D5-acceptance-report.md`、`docs/progress-log.md`；本轮无新增/删除文件，保留之前W4-D5代码及自动化结果，未重跑/虚构测试，不修改数据库/源码，不暂存commit/push，不开始W5。待用户补数据库名、A～G和7项附加结果、POST状态截图及Console错误内容后再决定最终人工验收状态。
+
+## 2026-10-24 W4-D5：最终人工确认补记与G3证据核查
+
+- 用户明确确认实际人工数据库为`backend/build/w4d4-manual.sqlite3`，Reporter工单WX202610240002、Worker本人单WX202610240001，A～G全部通过；七项附加测试（刷新重新登录、后端离线恢复、退出路由保护、非法表单、跨用户访问、同草稿失败重试、重复提交保护）全部通过。作为项目开发者人工结果记录，不冒充Codex本轮浏览器实测，不覆盖原失败历史。
+- 本轮实际只读检查库文件存在，未查询、迁移、seed或修改人工库。实际打开`G3-network-create-submit.png`发现其内容为Console，而非Network：favicon.ico404、Chrome Built-In AI LanguageDetector提示，来源content_main.js:5633。按用户结论记录为非阻塞图标缺失及浏览器信息，无业务异常证据，本轮不修业务或图标。
+- G3可见内容不含密码/Token/Authorization或私人信息；但没有POST创建201、submit200、工单ID或order_no，不能确认两请求同单。文件名与内容不符，明确保留写请求截图证据缺口；没有伪造、重命名、修改或合成截图。目录现9张图仍被build忽略，不暂存。
+- 已更新三份验收文档，用户场景确认状态为通过，既有自动化16/16、前端9/9与7/7等结果原样保留且本轮未重跑。总体结论：自动化和用户人工场景通过，真正POST Network截图关联证据待补，暂不标记最终完整证据验收通过。请仅补真实写请求状态/响应ID及同单关联，用户已确认场景不需无故重复。
+- 本轮仅编辑`docs/W4-D5-manual-acceptance.md`、`docs/W4-D5-acceptance-report.md`、`docs/progress-log.md`，无本轮新建/删除；累计W4-D5预期仍4修改/4新增，未改变源码、Schema、seed、冻结设计、测试资产或依赖。未git add/commit/push，不进入W5，等待证据与提交批准。
+
+### 同轮后续：用户替换正确G3，重新读取核验
+
+- 用户通知替换后，重新打开同一路径当前36294字节PNG（旧图6070字节），新图确为Network：work-orders201、submit200、详情名9及timeline查询200。可见区域未发现Token、Authorization、密码或私人信息。旧Console图已由用户覆盖，不在该路径，原实际审阅文字保留，不恢复或伪造旧图。
+- 创建/提交状态码证据已补齐，但未展开创建响应data.id、submit完整URL/响应id，Method列也未显示，尚不能独立确认两请求同单。详情名9与C/E原工单7不同，不能直接关联WX202610240002或旧自动化临时order9；可能是另一次人工验证，需确认编号。
+- 用户A～G与七项附加测试全部通过的确认保持有效，现仅待同单关联证据。三文档同步更新，本轮仍未重跑测试、未改代码或数据库，累计Git范围仍4修改/4新增，未暂存/提交/推送，不进入W5。
+
+### 2026-10-24 最终补齐G3～G6：W4-D5人工与自动化验收通过
+
+- 用户明确新补拍样本ID10、编号WX202610240005；Codex本轮逐张实际打开当前G3/G4/G5/G6复核。G3为work-orders201、submit200、详情10/时间线200；G4创建响应id10/DRAFT/version1/order_no null；G6实际是submit General（文件名G6-order-detail-response.png.png），明确POST /api/work-orders/10/submit及200；G5响应id10/WX202610240005/PENDING_REVIEW/version2，提交UTC2026-10-24T03:30:20.075Z。路径与响应ID一致，结合总览和用户确认，同一工单关联证据通过，之前证据缺口关闭。
+- 这只是后续新增补拍样本，不覆盖Reporter WX202610240002和Worker WX202610240001的人工记录，不与2026-10-23自动化临时库ID10混用。本轮不另查/修改人工库，不重跑自动化、不重新操作浏览器；截图审阅与用户人工结果、旧自动化实测分别标注。
+- 目录现12张图，四张新证据可见区域无密码/Token/Authorization或私人信息；G4/G5裁切的request_id不补写未知字符，G6折叠请求头不宣称已检查。图片未移动、重命名、合成或暂存，继续由build规则忽略。
+- 最终结论：**W4-D5自动化验收通过；A～G浏览器人工验收及七项附加测试通过；同一工单关联证据已由新增截图补齐；人工与自动化验收通过。**favicon404和Chrome Built-In AI提示为非阻塞问题，本轮不修复。原16/16 CTest、认证9/9、报修7/7、构建/冒烟/SQL结果保留，不写成本轮重跑；W4-D4历史失败及本轮前期补图过程均保留。
+- 本轮仅同步docs/W4-D5-manual-acceptance.md、docs/W4-D5-acceptance-report.md、docs/progress-log.md；无新建/删除，累计W4-D5仍4修改/4新增，等待用户Git文件核对及提交批准。未git add/commit/push，不进入W5。
