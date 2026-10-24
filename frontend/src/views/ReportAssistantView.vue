@@ -1,12 +1,36 @@
 <script setup>
-import { reactive, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { reactive, ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { authState } from '../stores/auth.js'
 import { chatWithReportAssistant, generateReportDraft } from '../api/reportAssistant.js'
 import AiReportDraftPreview from '../components/AiReportDraftPreview.vue'
 import { reportAssistantFlow, dataDisclosure } from '../utils/reportAssistant.js'
+import { credentialSnapshot } from '../api/credentials.js'
+import { reportDraftHandoff, draftSnapshot } from '../utils/reportDraftHandoff.js'
 
 const flow = reactive(reportAssistantFlow(chatWithReportAssistant, generateReportDraft))
 const transcript = ref(null)
+const router = useRouter(), handingOff = ref(false), handoffError = ref('')
+let active = true
+const canUse = computed(() => authState.status === 'authenticated' && ['reporter', 'worker'].includes(authState.user?.role) && flow.canUseDraft && !handingOff.value)
+async function useDraft() {
+  if (!canUse.value) return
+  handingOff.value = true; handoffError.value = ''
+  const revision = credentialSnapshot().revision, source = JSON.stringify(flow.draft)
+  let ticket
+  try {
+    await ElMessageBox.confirm('即将使用当前编辑后的 AI 建议填写报修表单。AI 不会自动创建或提交工单。故障分类、具体位置、联系人等信息仍需你核对补充。是否继续？', '使用 AI 建议', { type: 'warning' })
+    if (!active || authState.status !== 'authenticated' || !['reporter', 'worker'].includes(authState.user?.role) || revision !== credentialSnapshot().revision || !flow.canUseDraft || source !== JSON.stringify(flow.draft)) return
+    ticket = reportDraftHandoff.offer(draftSnapshot(flow.draft))
+    const failure = await router.push('/report/new')
+    reportDraftHandoff.discard(ticket) // Already consumed on success; discard on redirects/aborts too.
+    if (failure && active) handoffError.value = '页面跳转未完成，建议未交接，请重新确认。'
+  } catch (e) {
+    if (ticket) reportDraftHandoff.discard(ticket)
+    if (active && e !== 'cancel' && e !== 'close') handoffError.value = '建议交接未完成，请核对建议及登录状态后重试。'
+  } finally { handingOff.value = false }
+}
 watch(() => [flow.messages.length, flow.busy], async () => {
   await nextTick()
   if (transcript.value) transcript.value.scrollTop = transcript.value.scrollHeight
@@ -21,7 +45,7 @@ function keydown(event) {
 const clear = () => flow.clear()
 const copy = () => flow.copyDraft((text) => navigator.clipboard.writeText(text))
 onMounted(() => window.addEventListener('pagehide', clear))
-onBeforeUnmount(() => { window.removeEventListener('pagehide', clear); flow.clear() })
+onBeforeUnmount(() => { active = false; window.removeEventListener('pagehide', clear); flow.clear() })
 </script>
 
 <template>
@@ -59,7 +83,8 @@ onBeforeUnmount(() => { window.removeEventListener('pagehide', clear); flow.clea
     <p v-if="flow.draftBusy" role="status">正在整理报修建议…</p>
     <el-alert v-if="flow.draftError" :title="flow.draftError" type="error" :closable="false" />
     <el-button v-if="flow.draftBusy" @click="flow.cancelDraft()">取消等待建议</el-button>
-    <AiReportDraftPreview v-if="flow.draft" :model-value="flow.draft" :stale="flow.draftStale" :busy="flow.busy || flow.draftBusy" :can-generate="flow.canGenerateDraft" :copy-notice="flow.copyNotice" @update:model-value="flow.editDraft($event)" @copy="copy" @regenerate="flow.generateDraft()" @cancel="flow.cancelDraft()" />
+    <el-alert v-if="handoffError" :title="handoffError" type="error" :closable="false" />
+    <AiReportDraftPreview v-if="flow.draft" :model-value="flow.draft" :stale="flow.draftStale" :busy="flow.busy || flow.draftBusy || handingOff" :can-generate="flow.canGenerateDraft && !handingOff" :can-use="canUse" :copy-notice="flow.copyNotice" @update:model-value="flow.editDraft($event)" @copy="copy" @use="useDraft" @regenerate="flow.generateDraft()" @cancel="flow.cancelDraft()" />
   </main>
 </template>
 

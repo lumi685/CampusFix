@@ -1,7 +1,7 @@
 <script setup>
 import { draftFields } from '../utils/reportAssistant.js'
-const props = defineProps({ modelValue: { type: Object, required: true }, stale: Boolean, busy: Boolean, canGenerate: Boolean, copyNotice: String })
-const emit = defineEmits(['update:modelValue', 'regenerate', 'copy', 'cancel'])
+const props = defineProps({ modelValue: { type: Object, required: true }, stale: Boolean, busy: Boolean, canGenerate: Boolean, canUse: Boolean, copyNotice: String })
+const emit = defineEmits(['update:modelValue', 'regenerate', 'copy', 'cancel', 'use'])
 function edit(field, value) { emit('update:modelValue', { ...props.modelValue, [field]: value }) }
 function editMissing(index, text) {
   const list = [...props.modelValue.missing_information]; list[index] = text; edit('missing_information', list)
@@ -11,7 +11,7 @@ function removeMissing(index) { edit('missing_information', props.modelValue.mis
 <template>
   <section class="draft-preview" aria-label="可编辑报修建议">
     <h2>AI 建议，尚未创建或提交工单</h2>
-    <p>请逐项核对和编辑。分类与位置只是文字线索，不能代替正式报修中的真实选项；本页不会自动回填报修表单。</p>
+    <p>请逐项核对和编辑。分类与位置只是文字线索，不能代替正式报修中的真实选项；仅在你确认后带入标题和描述，不会自动创建工单。</p>
     <el-alert v-if="stale" title="对话已变化或正在重新生成，此建议不再是当前有效建议，请重新生成。" type="warning" :closable="false" />
     <el-form label-position="top" :disabled="busy || stale" @submit.prevent>
       <el-form-item v-for="[field, label, max] in draftFields" :key="field" :label="`${label}（最多${max}字，可删除）`" :for="`ai-draft-${field}`">
@@ -26,6 +26,7 @@ function removeMissing(index) { edit('missing_information', props.modelValue.mis
       </fieldset>
     </el-form>
     <div class="draft-actions">
+      <el-button type="primary" :disabled="!canUse" @click="emit('use')">使用此建议填写报修</el-button>
       <el-button :disabled="busy || stale" @click="emit('copy')">复制建议</el-button>
       <el-button :disabled="!canGenerate" @click="emit('regenerate')">重新生成</el-button>
       <RouterLink to="/report/new"><el-button>前往普通报修</el-button></RouterLink>

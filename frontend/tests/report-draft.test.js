@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import { compile } from '@vue/compiler-ssr'
-import { createSSRApp, h, reactive, ref, nextTick } from 'vue'
+import { createSSRApp, h, reactive, ref, nextTick, computed } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { reportAssistantFlow, chatContext, draftContext, checkedDraft, draftFields, draftText } from '../src/utils/reportAssistant.js'
 import { generateReportDraft } from '../src/api/reportAssistant.js'
@@ -114,7 +114,7 @@ test('actual preview SSR escapes model and edited text, no executable markup (no
   const { descriptor } = parse(readFileSync(new URL('../src/components/AiReportDraftPreview.vue', import.meta.url), 'utf8'))
   const render = new Function('require', compile(descriptor.template.content, { mode: 'function' }).code)(createRequire(import.meta.url))
   const d = checkedDraft(result()); d.title = '<script>alert(1)</script>'; d.missing_information = ['<img src=x onerror=alert(1)>']
-  const app = createSSRApp({ setup: () => ({ modelValue: d, stale: false, busy: false, canGenerate: true, copyNotice: '', draftFields, edit() {}, editMissing() {}, removeMissing() {}, emit() {} }), ssrRender: render })
+  const app = createSSRApp({ setup: () => ({ modelValue: d, stale: false, busy: false, canGenerate: true, canUse: true, copyNotice: '', draftFields, edit() {}, editMissing() {}, removeMissing() {}, emit() {} }), ssrRender: render })
   for (const name of ['ElForm', 'ElFormItem', 'ElButton', 'ElAlert', 'RouterLink']) app.component(name, { setup: (_, { slots }) => () => h('div', slots.default?.()) })
   app.component('ElInput', { props: ['modelValue'], setup: (props) => () => h('textarea', props.modelValue) })
   const html = await renderToString(app); assert.doesNotMatch(html, /<script>|<img src=x/); assert.match(html, /&lt;script&gt;/); assert.match(html, /&lt;img/)
@@ -124,8 +124,8 @@ test('actual page auth loss and unmount clear pending suggestions and edited sta
   const code = compileScript(descriptor, { id: 'draft-cleanup', genDefaultAs: 'component' }).content.replace(/^import .*$/gm, '')
   for (const kind of ['authentication', 'unmount']) {
     let authChanged, unmount, resolve, signal, mounted
-    const names = ['reactive', 'ref', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount', 'authState', 'chatWithReportAssistant', 'generateReportDraft', 'AiReportDraftPreview', 'reportAssistantFlow', 'dataDisclosure']
-    const component = new Function(...names, `${code};return component`)(reactive, ref, (_, cb) => { authChanged = cb }, nextTick, (f) => { mounted = f }, (f) => { unmount = f }, { status: 'authenticated' }, async () => 'Reply', (_, s) => { signal = s; return new Promise((r) => { resolve = r }) }, {}, reportAssistantFlow, 'Disclosure')
+    const names = ['reactive', 'ref', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount', 'authState', 'chatWithReportAssistant', 'generateReportDraft', 'AiReportDraftPreview', 'reportAssistantFlow', 'dataDisclosure', 'computed', 'useRouter', 'ElMessageBox', 'credentialSnapshot', 'reportDraftHandoff', 'draftSnapshot']
+    const component = new Function(...names, `${code};return component`)(reactive, ref, (_, cb) => { authChanged = cb }, nextTick, (f) => { mounted = f }, (f) => { unmount = f }, { status: 'authenticated' }, async () => 'Reply', (_, s) => { signal = s; return new Promise((r) => { resolve = r }) }, {}, reportAssistantFlow, 'Disclosure', computed, () => ({}), {}, () => ({ revision: 0 }), {}, (value) => value)
     const previous = globalThis.window; globalThis.window = { addEventListener() {}, removeEventListener() {} }
     try {
       const setup = component.setup({}, { expose() {} }); mounted()
@@ -138,7 +138,7 @@ test('actual page auth loss and unmount clear pending suggestions and edited sta
     } finally { globalThis.window = previous }
   }
 })
-test('no order writes, prefill, persistence or HTML execution in AI-D2 UI modules', () => {
+test('AI UI never writes orders or persists content; ordinary navigation remains available alongside confirmed handoff', () => {
   for (const path of ['../src/components/AiReportDraftPreview.vue', '../src/views/ReportAssistantView.vue', '../src/api/reportAssistant.js', '../src/utils/reportAssistant.js']) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8')
     assert.doesNotMatch(source, /createOrder|submitOrder|editOrder|\/api\/work-orders|localStorage|sessionStorage|v-html/)

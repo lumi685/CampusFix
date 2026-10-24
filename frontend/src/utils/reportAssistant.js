@@ -58,6 +58,11 @@ export function reportAssistantFlow(request, draftRequest) {
       return this.consent && !this.busy && !this.failed && !this.draftBusy &&
         this.messages.some((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
     },
+    get canUseDraft() {
+      if (!this.draft || this.draftStale || this.busy || this.draftBusy || this.failed || this.error || this.draftError) return false
+      if (Object.keys(this.draft).length !== 6 || [...draftFields.map(([key]) => key), 'missing_information'].some((key) => !Object.hasOwn(this.draft, key))) return false
+      try { draftText(this.draft); return true } catch { return false }
+    },
     invalidateDraft() {
       ++draftEpoch; draftAbort?.abort(); draftAbort = undefined
       this.draftBusy = false; this.draftStale = !!this.draft; this.draftError = ''; this.copyNotice = ''

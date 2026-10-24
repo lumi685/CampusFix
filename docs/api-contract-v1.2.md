@@ -104,3 +104,13 @@ AI模块不读业务表、不持久化建议、不开事务、不写work_orders/
 测试：ai_draft_service（严格字段/Unicode/服务编排）、ai_draft_http（独立假模型+正式HTTP+SQLite前后快照）、frontend/tests/report-draft.test.js（流程/API/真实SFC/SSR，非浏览器）。AI-D1原测试独立回归。实现阶段AI-D2真实DeepSeek A～H及浏览器专项曾待用户人工验收，不能用AI-D1人工结果替代；此前自动化记录保留，本次仅同步状态、不重跑测试。
 
 验收状态同步（2026-10-24）：用户已在真实 DeepSeek 浏览器中完成 A～H 八项人工验收，8/8 通过。执行人为用户本人，非 Codex；未提供原始 Network、模型名、额外数据库快照等证据。390px 窄屏、剪贴板权限拒绝等未单独反馈的专项仍未验证。
+
+## FR-AI-03：AI-D3前端安全预填（无新增REST接口）
+
+2026-10-24用户批准：AI-D3复用既有API-04、05、06、08、10，未新增REST端点；详情时间线验证另复用API-11。AI-01/02请求、响应、共享额度及后端只读边界不变。上文AI-D1/D2“不预填”描述保留为其阶段范围，不代表本节批准后的前端交接功能被禁止。
+
+只有用户确认“使用此建议填写报修”后，当前编辑快照可在同一认证会话中经一次性内存交接预填title/description，不进行任何HTTP写入。不通过URL、持久化存储或请求传递建议快照，分类/位置线索不转ID。表单的category_id/location_id必须选择真实目录；紧急度默认NORMAL，联系人/电话/日期不自动填。
+
+AI来源表单经原reportPayload校验及第二次用户确认后，复用reportSubmission调用原API-06创建DRAFT，再以服务端返回id/version调用API-08。创建body仅包含原八个允许字段（可选日期按原规则省略），不得含hint/missing_information/safety_note/身份/状态/单号/模型属性；submit仅expected_version。原权限、事务、编号、状态版本及409/422语义均不改变；失败重试原草稿、创建未知结果阻止再次创建。普通导航与接收建议本身不等于正式提交。
+
+AI-D3验收独立于原AI-D1/D2：真实HTTP/SQLite和组件路由测试见docs/V1.2-AI-D3-acceptance-report.md；本阶段真实DeepSeek浏览器人工验收仍待执行，不复用旧人工通过结论。

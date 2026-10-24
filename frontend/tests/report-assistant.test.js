@@ -99,7 +99,7 @@ test('actual Vue template server rendering escapes both user HTML and model HTML
   const { descriptor } = parse(readFileSync(new URL('../src/views/ReportAssistantView.vue', import.meta.url), 'utf8'))
   assert.doesNotMatch(descriptor.template.content, /v-html/)
   const ssrRender = new Function('require', compile(descriptor.template.content, { mode: 'function' }).code)(createRequire(import.meta.url))
-  const app = Vue.createSSRApp({ setup: () => ({ flow: { messages: [user('<script>alert(1)</script>'), assistant('<img src=x onerror=alert(2)>')], input: '', consent: false }, dataDisclosure, keydown: () => {} }), ssrRender })
+  const app = Vue.createSSRApp({ setup: () => ({ flow: { messages: [user('<script>alert(1)</script>'), assistant('<img src=x onerror=alert(2)>')], input: '', consent: false }, handoffError: '', dataDisclosure, keydown: () => {} }), ssrRender })
   app.component('RouterLink', { setup: (_, { slots }) => () => Vue.h('a', slots.default?.()) })
   // UI chrome is stubbed; use the actual message interpolation template for escaping assertions.
   for (const name of ['ElAlert', 'ElInput', 'ElButton', 'AiReportDraftPreview']) app.component(name, { setup: (_, { slots }) => () => Vue.h('div', slots.default?.()) })
@@ -111,8 +111,8 @@ test('actual SFC cleanup, composition key guard and no persistent conversation s
   const { descriptor } = parse(source)
   const compiled = compileScript(descriptor, { id: 'ai-cleanup', genDefaultAs: 'component' }).content
   let unmount, watched, mounted, calls = 0
-  const names = ['reactive', 'ref', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount', 'authState', 'chatWithReportAssistant', 'generateReportDraft', 'AiReportDraftPreview', 'reportAssistantFlow', 'dataDisclosure']
-  const component = new Function(...names, `${compiled.replace(/^import .*$/gm, '')};return component`)(Vue.reactive, Vue.ref, (a, b) => { if (typeof b === 'function') watched = b }, Vue.nextTick, (f) => { mounted = f }, (f) => { unmount = f }, { status: 'authenticated' }, async () => { calls++; return 'Reply' }, async () => {}, {}, reportAssistantFlow, dataDisclosure)
+  const names = ['reactive', 'ref', 'watch', 'nextTick', 'onMounted', 'onBeforeUnmount', 'authState', 'chatWithReportAssistant', 'generateReportDraft', 'AiReportDraftPreview', 'reportAssistantFlow', 'dataDisclosure', 'computed', 'useRouter', 'ElMessageBox', 'credentialSnapshot', 'reportDraftHandoff', 'draftSnapshot']
+  const component = new Function(...names, `${compiled.replace(/^import .*$/gm, '')};return component`)(Vue.reactive, Vue.ref, (a, b) => { if (typeof b === 'function') watched = b }, Vue.nextTick, (f) => { mounted = f }, (f) => { unmount = f }, { status: 'authenticated' }, async () => { calls++; return 'Reply' }, async () => {}, {}, reportAssistantFlow, dataDisclosure, Vue.computed, () => ({}), {}, () => ({ revision: 0 }), {}, (value) => value)
   const oldWindow = globalThis.window; const listeners = new Map()
   globalThis.window = { addEventListener: (name, f) => listeners.set(name, f), removeEventListener: (name) => listeners.delete(name) }
   try {
