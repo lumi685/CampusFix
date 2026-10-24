@@ -63,10 +63,19 @@ void handle(const std::filesystem::path &path,const drogon::HttpRequestPtr &r,Ht
         if(rawId.empty()) {
             const auto page=service.list(identity->id,token,query);data["items"]=Json::arrayValue;
             for(const auto &worker:page.items) {
-                data["items"].append(summary(worker));
+                auto row=summary(worker);
+                if(page.management){row["active"]=worker.active;row["emergency_duty"]=worker.emergencyDuty;}
+                data["items"].append(row);
                 if(worker.activeTasks>worker.capacity)LOG_WARN<<"Worker overload worker_id="<<worker.id<<" active_tasks="<<worker.activeTasks<<" capacity="<<worker.capacity<<" request_id="<<rid;
             }
             data["page"]=Json::Int64(page.page);data["page_size"]=Json::Int64(page.pageSize);data["total"]=Json::Int64(page.total);
+            if(page.management) {
+                data["skill_options"]=Json::arrayValue;
+                for(const auto &skill:page.skillOptions) {
+                    Json::Value row(Json::objectValue);row["id"]=Json::Int64(skill.id);row["code"]=skill.code;row["name"]=skill.name;
+                    row["requires_certificate"]=skill.requiresCertificate;data["skill_options"].append(row);
+                }
+            }
         } else if(!update) {
             const auto load=service.workload(identity->id,token,id);data["worker_id"]=Json::Int64(load.workerId);data["active_tasks"]=Json::Int64(load.activeTasks);
             data["max_concurrent_tasks"]=Json::Int64(load.capacity);data["remaining_capacity"]=Json::Int64(load.remaining);data["calculated_at"]=load.calculatedAt;

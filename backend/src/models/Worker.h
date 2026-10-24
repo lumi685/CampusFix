@@ -16,6 +16,7 @@ struct WorkerRecord {
     std::int64_t id=0,userId=0,serviceAreaId=0,capacity=0,activeTasks=0;
     std::string workerNo,displayName,availability,updatedAt;
     std::vector<WorkerSkill> skills;
+    bool active=false,emergencyDuty=false;
 };
 struct WorkerQuery {
     std::int64_t page=1,pageSize=20;
@@ -23,7 +24,13 @@ struct WorkerQuery {
     std::optional<std::int64_t> skillId;
     bool mine=false;
 };
-struct WorkerPage {std::vector<WorkerRecord> items;std::int64_t page=1,pageSize=20,total=0;};
+struct SkillOption {std::int64_t id=0;std::string code,name;bool requiresCertificate=false;};
+struct WorkerPage {
+    std::vector<WorkerRecord> items;
+    std::int64_t page=1,pageSize=20,total=0;
+    bool management=false;
+    std::vector<SkillOption> skillOptions;
+};
 struct WorkerLoad {
     std::int64_t workerId=0,activeTasks=0,capacity=0,remaining=0;
     std::string calculatedAt;

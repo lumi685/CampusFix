@@ -8,6 +8,8 @@
     "build": "vite build",
     "test:auth": "node --test tests/auth.test.js",
     "test:orders": "node --test tests/orders.test.js",
+    "test:admin": "node --test tests/admin.test.js",
+    "test:admin:http": "node --test tests/admin-http.test.js",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

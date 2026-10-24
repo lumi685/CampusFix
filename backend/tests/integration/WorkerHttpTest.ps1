@@ -32,8 +32,18 @@ try {
  foreach($token in @('','invalid-session',$data.expired,$data.revoked)){$null=Request 'GET' '/api/workers' $token $null 401;$null=Put $token (Profile) 401}
  $a=Request 'GET' '/api/workers' $da;$b=Request 'GET' '/api/workers' $dbb
  Assert ($a.data.total -eq 3 -and (($a.data.items.id) -join ',') -eq '1,2,3' -and $b.data.total -eq 3 -and (($b.data.items.id) -join ',') -eq '4,5,6') 'Scoped totals/IDs incorrect'
- foreach($row in @($a.data.items)+@($b.data.items)){Assert (((@($row.PSObject.Properties.Name)|Sort-Object) -join ',') -eq 'active_tasks,availability,display_name,id,max_concurrent_tasks,service_area_id,skills,worker_no') 'List whitelist'}
+ foreach($row in @($a.data.items)+@($b.data.items)){Assert (((@($row.PSObject.Properties.Name)|Sort-Object) -join ',') -eq 'active,active_tasks,availability,display_name,emergency_duty,id,max_concurrent_tasks,service_area_id,skills,worker_no') 'Management list whitelist'}
+ Assert (@($a.data.skill_options).Count -eq 3) 'Complete active skill options independent of worker page'
+ foreach($option in $a.data.skill_options){Assert (((@($option.PSObject.Properties.Name)|Sort-Object) -join ',') -eq 'code,id,name,requires_certificate') 'Skill option whitelist'}
  $mine=Request 'GET' '/api/workers?mine=true' $worker;Assert ($mine.data.total -eq 1 -and $mine.data.items[0].id -eq 1) 'Mine view'
+ Assert (-not ($mine.data.PSObject.Properties.Name -contains 'skill_options') -and -not ($mine.data.items[0].PSObject.Properties.Name -contains 'active') -and -not ($mine.data.items[0].PSObject.Properties.Name -contains 'emergency_duty')) 'Worker view must not gain management fields'
+ $hydrate=Profile;$hydrate.active=$false;$hydrate.emergency_duty=$true;$hydrate.availability='OFF_DUTY';$hydrate.skills[0].level=4;$hydrate.skills[1].level=2;$null=Put $da $hydrate
+ $full=Request 'GET' '/api/workers' $da;$record=@($full.data.items|Where-Object id -eq 1)[0]
+ Assert ($record.active -is [bool] -and -not $record.active -and $record.emergency_duty -is [bool] -and $record.emergency_duty -and $record.availability -eq 'OFF_DUTY' -and @($record.skills).Count -eq 2) 'Hydration preserves actual false/true/status/skills'
+ $hydrate.max_concurrent_tasks=4;$partial=Put $da $hydrate;Assert (-not ($partial.data.PSObject.Properties.Name -contains 'active')) 'API16 remains partial'
+ $reloaded=Request 'GET' '/api/workers' $da;$record=@($reloaded.data.items|Where-Object id -eq 1)[0]
+ Assert (-not $record.active -and $record.emergency_duty -and $record.availability -eq 'OFF_DUTY' -and $record.max_concurrent_tasks -eq 4 -and @($record.skills).Count -eq 2 -and $record.skills[0].skill_id -eq 1 -and $record.skills[0].level -eq 4 -and $record.skills[0].certified -and $record.skills[1].skill_id -eq 2 -and $record.skills[1].level -eq 2 -and -not $record.skills[1].certified) 'Capacity-only save preserves other fields'
+ $null=Put $da (Profile)
  $null=Request 'GET' '/api/workers' $worker $null 403;$null=Request 'GET' '/api/workers' $reporter $null 403
  $null=Request 'GET' '/api/workers' $admin $null 403;Mode 'admin-area';$null=Request 'GET' '/api/workers' $admin $null 403;Mode 'admin-worker-b'
  $adminList=Request 'GET' '/api/workers' $admin;Assert ((($adminList.data.items.id) -join ',') -eq '4,5,6') 'Admin mixed WORKER_MANAGE and AREA_SCOPE'
@@ -41,7 +51,7 @@ try {
  $page=Request 'GET' '/api/workers?page=2&page_size=2' $da;Assert ($page.data.total -eq 3 -and $page.data.items[0].id -eq 3 -and @($page.data.items).Count -eq 1) 'Pagination'
  $filter=Request 'GET' '/api/workers?availability=OFF_DUTY' $da;Assert ($filter.data.items[0].id -eq 3) 'Availability filter'
  $filter=Request 'GET' '/api/workers?skill_id=1' $da;Assert ($filter.data.total -eq 2) 'Skill filter'
- $empty=Request 'GET' '/api/workers?skill_id=3' $da;Assert ($empty.data.total -eq 0 -and @($empty.data.items).Count -eq 0) 'Empty filter'
+ $empty=Request 'GET' '/api/workers?skill_id=3' $da;Assert ($empty.data.total -eq 0 -and @($empty.data.items).Count -eq 0 -and @($empty.data.skill_options).Count -eq 3) 'Empty filter retains independent skill options'
  foreach($query in @('page=0','page=-1','page=1.0','page_size=101','skill_id=0','availability=INVALID','mine=1','worker_id=2','user_id=7','service_area_id=2')){$null=Request 'GET' "/api/workers?$query" $da $null 422}
  $load=Request 'GET' '/api/workers/1/workload' $worker;Assert ($load.data.active_tasks -eq 2 -and $load.data.remaining_capacity -eq 1 -and $load.data.calculated_at -match 'Z$') 'Real workload'
  $load2=Request 'GET' '/api/workers/2/workload' $da;Assert ($load2.data.active_tasks -eq 2) 'Ended assignments counted'
@@ -75,7 +85,7 @@ try {
  $bad=Profile;$bad.availability='INVALID';$null=Put $da $bad 422
  foreach($area in @(999999,7,11)){$null=Put $da (Profile $area) 422}
  Mode 'disable-area';$null=Put $da (Profile 3) 422;Mode 'enable-area'
- Mode 'disable-skill';$null=Put $da (Profile) 422;Mode 'enable-skill'
+ Mode 'disable-skill';$null=Put $da (Profile) 422;$activeOptions=Request 'GET' '/api/workers' $da;Assert (-not (@($activeOptions.data.skill_options.id) -contains 1)) 'Inactive skill excluded from options';Mode 'enable-skill'
  foreach($fault in @('fail-profile','fail-skill')){Mode $fault;$bad=Profile;$bad.skills=@(@{skill_id=2;level=5;certified=$true},@{skill_id=3;level=2;certified=$false});$null=Put $da $bad 500;Mode 'clear-failure'}
  $body=Profile 3 2;$body.skills=@(@{skill_id=1;level=4;certified=$false});$updated=Put $da $body
  $after=SQL '--inspect' 1|ConvertFrom-Json;$finalLoad=Request 'GET' '/api/workers/1/workload' $da;$finalList=Request 'GET' '/api/workers?skill_id=1' $da

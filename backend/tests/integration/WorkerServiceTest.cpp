@@ -19,6 +19,10 @@ int main() {
             const auto reject=[&](const std::function<void()> &call,int status){const auto before=test::workerFingerprint(db);bool caught=false;try{call();}catch(const WorkOrderError &e){caught=e.status==status;}check(caught&&before==test::workerFingerprint(db),"rejected "+std::to_string(status)+" with whole database unchanged");};
             const auto immutable=test::reviewFingerprint(db);
             const auto a=list(da),b=list(dbb);check(a.total==3&&b.total==3&&a.items[0].id==1&&b.items[0].id==4,"A/B scoped list and totals");
+            check(a.management&&a.skillOptions.size()==3,"management skill options include unassigned skills independently of page");
+            db.execute("UPDATE workers SET active=0,emergency_duty=1,availability='OFF_DUTY' WHERE id=1");
+            const auto hydrated=list(da);check(!hydrated.items[0].active&&hydrated.items[0].emergencyDuty&&hydrated.items[0].availability=="OFF_DUTY","real management boolean hydration");
+            db.execute("UPDATE workers SET active=1,emergency_duty=0,availability='AVAILABLE' WHERE id=1");
             test::grant(db,"demo_dispatcher","AREA_SCOPE",3);check(list(da).total==3,"overlapping grants do not duplicate workers");
             WorkerQuery q;q.pageSize=2;check(list(da,q).items.size()==2&&list(da,q).total==3,"stable first page and scoped total");q.page=2;check(list(da,q).items.size()==1&&list(da,q).items[0].id==3,"stable second page");q.page=3;check(list(da,q).items.empty(),"empty page retains scoped total");
             q={};q.availability="OFF_DUTY";check(list(da,q).total==1&&list(da,q).items[0].id==3,"availability filter");q.availability="DISABLED";check(list(dbb,q).total==1,"disabled profile stays manageable");

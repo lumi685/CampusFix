@@ -2,12 +2,13 @@ import axios from 'axios'
 import { credentialSnapshot, invalidateCredential } from './credentials.js'
 
 export class ApiError extends Error {
-  constructor(message, status = 0, code = '', requestId = '') {
+  constructor(message, status = 0, code = '', requestId = '', field = '') {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.requestId = requestId
+    this.field = field
   }
 }
 
@@ -35,7 +36,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-function safeError(status, code, requestId, timeout = false) {
+function safeError(status, code, requestId, timeout = false, field = '') {
   let message = '请求未完成，请稍后重试'
   if (timeout) message = '连接后端超时，请稍后重试'
   else if (status === 0 || status >= 500) message = '无法连接后端或服务暂不可用，请确认后端已启动'
@@ -44,7 +45,7 @@ function safeError(status, code, requestId, timeout = false) {
   else if (status === 404) message = '资源不存在或无权访问'
   else if (status === 409) message = '工单状态或版本已变化，请核对最新数据'
   else if (status === 400 || status === 422) message = '请求字段格式不正确，请检查输入'
-  return new ApiError(message, status, code, requestId)
+  return new ApiError(message, status, code, requestId, field)
 }
 
 apiClient.interceptors.response.use(
@@ -65,6 +66,7 @@ apiClient.interceptors.response.use(
     // Never propagate the Axios config/request: those can contain credentials.
     return Promise.reject(safeError(status, typeof body?.code === 'string' ? body.code : '',
       typeof body?.request_id === 'string' && /^req_[\w-]{1,100}$/.test(body.request_id) ? body.request_id : '',
-      error.code === 'ECONNABORTED'))
+      error.code === 'ECONNABORTED',
+      typeof body?.data?.field === 'string' && /^[a-z_]+(?:\[\d{1,6}\])?(?:\.[a-z_]+)?$/.test(body.data.field) && body.data.field.length <= 80 ? body.data.field : ''))
   },
 )

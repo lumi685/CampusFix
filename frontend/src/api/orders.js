@@ -7,6 +7,8 @@ async function get(path, params) {
 export const locations = (parentId) => get('/locations', parentId == null ? {} : { parent_id: parentId })
 export const categories = (parentId) => get('/fault-categories', parentId == null ? {} : { parent_id: parentId })
 export const reportedOrders = (params = {}) => get('/work-orders', { ...params, view: 'reported' })
+export const managedOrders = (params = {}) => get('/work-orders', { ...params, view: 'managed' })
+export const reviewOrder = async (id, body) => (await apiClient.post(`/work-orders/${orderId(id)}/review`, body, authenticated)).data.data
 export const orderDetail = (id) => get(`/work-orders/${orderId(id)}`)
 export const orderTimeline = (id, params) => get(`/work-orders/${orderId(id)}/timeline`, params)
 export const createOrder = async (body) => (await apiClient.post('/work-orders', body, authenticated)).data.data

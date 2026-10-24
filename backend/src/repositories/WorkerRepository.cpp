@@ -4,10 +4,11 @@
 namespace campusfix {
 namespace {
 const std::string columns="w.id,w.user_id,w.worker_no,u.display_name,w.service_area_id,w.availability,w.max_concurrent_tasks,"
-    "(SELECT count(*) FROM assignments a WHERE a.worker_id=w.id AND a.ended_at IS NULL),w.updated_at";
+    "(SELECT count(*) FROM assignments a WHERE a.worker_id=w.id AND a.ended_at IS NULL),w.updated_at,w.active,w.emergency_duty";
 WorkerRecord read(SqliteStatement &q) {
     WorkerRecord r;r.id=q.columnInt(0);r.userId=q.columnInt(1);r.workerNo=q.columnText(2);r.displayName=q.columnText(3);
-    r.serviceAreaId=q.columnInt(4);r.availability=q.columnText(5);r.capacity=q.columnInt(6);r.activeTasks=q.columnInt(7);r.updatedAt=q.columnText(8);return r;
+    r.serviceAreaId=q.columnInt(4);r.availability=q.columnText(5);r.capacity=q.columnInt(6);r.activeTasks=q.columnInt(7);r.updatedAt=q.columnText(8);
+    r.active=q.columnInt(9)!=0;r.emergencyDuty=q.columnInt(10)!=0;return r;
 }
 }
 std::vector<WorkerSkill> WorkerRepository::skills(std::int64_t id) {
@@ -30,7 +31,11 @@ WorkerPage WorkerRepository::list(std::int64_t user,const std::string &cap,const
         " AND (?3 IS NULL OR w.availability=?3) AND (?4 IS NULL OR EXISTS(SELECT 1 FROM worker_skills ws JOIN skills s ON s.id=ws.skill_id "
         "WHERE ws.worker_id=w.id AND ws.skill_id=?4 AND ws.active=1 AND s.active=1))";
     const auto bind=[&](SqliteStatement &q){q.bindInt(1,user);q.bindText(2,cap);if(query.availability)q.bindText(3,*query.availability);else q.bindNull(3);if(query.skillId)q.bindInt(4,*query.skillId);else q.bindNull(4);};
-    WorkerPage result;result.page=query.page;result.pageSize=query.pageSize;
+    WorkerPage result;result.page=query.page;result.pageSize=query.pageSize;result.management=!query.mine;
+    if(result.management) {
+        auto options=db_.prepare("SELECT id,code,name,requires_certificate FROM skills WHERE active=1 ORDER BY code,id");
+        while(options.step())result.skillOptions.push_back({options.columnInt(0),options.columnText(1),options.columnText(2),options.columnInt(3)!=0});
+    }
     {auto q=db_.prepare(cte+"SELECT count(*)"+from);bind(q);q.step();result.total=q.columnInt(0);}
     auto q=db_.prepare(cte+"SELECT "+columns+from+" ORDER BY w.worker_no,w.id LIMIT ?5 OFFSET ?6");bind(q);q.bindInt(5,query.pageSize);q.bindInt(6,(query.page-1)*query.pageSize);
     while(q.step()){auto r=read(q);r.skills=skills(r.id);result.items.push_back(std::move(r));}return result;
