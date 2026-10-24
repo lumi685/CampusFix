@@ -17,14 +17,16 @@ let sequence = 0
 async function load(reset = false) {
   if (reset) page.value = 1
   const request = ++sequence; items.value = []; total.value = 0; error.value = ''; busy.value = false
-  if (!canRead.value) return
+  if (!canRead.value) { detailId.value = undefined; reviewId.value = undefined; return }
   busy.value = true
   try {
     const data = await managedOrders(managedQuery({ page: page.value, status: status.value, category: category.value }))
     if (request !== sequence) return
     items.value = data.items; total.value = data.total
     if (!data.items.length && data.total > 0 && page.value > 1) { page.value = Math.max(1, Math.ceil(data.total / 20)); await load() }
-  } catch (e) { if (request === sequence) error.value = adminError(e) }
+  } catch (e) {
+    if (request === sequence) { error.value = adminError(e); if ([401, 403, 404].includes(e.status)) { detailId.value = undefined; reviewId.value = undefined } }
+  }
   finally { if (request === sequence) busy.value = false }
 }
 watch(canRead, () => load(), { immediate: true })

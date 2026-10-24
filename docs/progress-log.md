@@ -486,3 +486,18 @@
 - 用户反馈、此前HTTP与自动化结果分别归档。本次没有附截图、Network回执、request_id、人工工单编号、具体页面时间、实际库名或浏览器版本；不编造、不套用旧临时工单ID10或自动化请求ID。补记日期不代表实际人工操作时刻。
 - API-14获准的只读DTO扩展记录完整保留；API-16无expected_version/乐观锁及最后写入覆盖风险不变，大chunk、有界读取、内存Token/离线退出/限流、物理故障/高压/跨机器未测等风险和非阻塞事项继续保留。
 - 本轮只改3份文档，无新增/删除文件；累计W5-D4范围仍12修改/13新增/0删除，共25文件，暂存为空。检查git diff --check与实际文件清单，不执行git add、commit或push。**W5-D4此前自动化与用户真实浏览器人工验收通过，等待最终源码及Git审查；不进入W5-D5。**
+
+## 2026-10-24 W5-D5：管理员权限与跨模块一致性自动化集成验收
+
+- 起始HEAD=794bb240383010f684f901fafbe3c74c0a2220ae（feat(admin): add review and worker management views），main与本地origin/main对齐，工作区/暂存为空；实际核对status/log/branch，未fetch。阅读冻结需求与W5-D1～D4证据，主要新增测试；不改后端业务代码/授权语义/写接口/Schema/seed/依赖或W1冻结文档，不开发W6/W7。
+- 新增统一W5D5SecurityFixture，复用真实迁移/正式seed及原Worker/Review夹具，在独立临时库建立A/B调度员、无授权/R(A)/R(B)/BUSINESS_READ(B)/WORKER_MANAGE(B)/MIX/仅AREA_SCOPE/全局只读sysadmin、报修人与维修员，包含待审核/已退回/待派单/拒绝及有效/历史任务。凭据随机且仅临时文件，密码占位不可登录；所有授权/Trigger仅限测试库。
+- 新增正式HTTP套件通过**180次请求、406次SQLite摘要快照核查、9轮真实重叠竞争**，新增C++ Service断言**0**（夹具SQL核验不冒充Service测试）。串行每个GET或预期失败均比较全库序列化摘要；覆盖区域分页/total/重叠授权、能力与范围不能混拼、撤销/停用/过期/撤销会话、审核/人员非法输入、状态版本冲突、旧/目标区域维护权限及故障回滚。逐次回执和前后行在被忽略的backend/build/Testing/w5d5-evidence.json。
+- 180次由162串行+18并发组成，最终HTTP分布200×51、201×10、400×4、401×4、403×18、404×20、409×17、422×54、500×2（两次预期故障）。失败审核/人员写入全库不变；三审核动作及补充重提同ID/编号/首次提交、精确版本和追加日志一致，公开原因与内部备注对A/B报修人和worker本人隔离。停用人员不结束既有派单，API-14/15有效负载均2；仅容量3→4保留false/true/OFF_DUTY及两技能资质，其他人员/账号/派单不变。
+- 并发APPROVE/APPROVE、APPROVE/RETURN、APPROVE/REJECT各3轮，独立HttpClient请求在真实SQLite写锁下均挂起后释放，交替发送顺序；每轮200/409、version只增1、日志只增1，actor/request_id/分类/紧急度对应胜者。最终包含RETURN与REJECT实际获胜，失败APPROVE不残留字段；这是审核竞争，不计入未实现的派单TC-CON。
+- 前端先写8项安全回归，得到5通过/3失败，复现非人员422容量误提示及旧/迟到负载残留；最小修复后8/8。再写失权列表刷新关闭抽屉的2项实际SFC setup测试，得到8通过/2失败；修复列表401/403/404后清编辑/详情/审核ID，以及读取提示权限消失时清理，最终**10/10**。未放宽后端权限，未做UI重构。三项已修复问题及根因见W5-D5报告。
+- 新HTTP首轮在第一轮竞争已得200/409后，因锁夹具ExitCode空值报Concurrency gate failed。独立对照显示进程已退出且stderr空、Refresh后ExitCode仍空；退出前缓存Handle可得真实0，只修PS5.1测试工具句柄，不改业务或放宽竞争断言。定向通过后两轮全量均通过；最终以**23/23、退出0、95.12秒**为准，新增HTTP项26.93秒，不累加重复执行为独立用例。
+- 本轮MSVC Debug构建成功、退出0，无编译/链接警告。CMake注册新测试触发重新配置，vcpkg原包均already installed，无下载/升级。原审核Service283/HTTP149、补充Service60/HTTP74、Worker Service62/HTTP113及W3/W4认证/工单/Schema/seed全部重跑通过，均已包含23项CTest，不重复计数。
+- 最终前端认证9/9、报修补充16/16、管理23/23、安全10/10（逻辑/非浏览器共58）均退出0，build成功，729.28kB/gzip237.92kB，既有大chunk警告保留。原前端模块代理HTTP本轮**4/4、44次请求**通过，与新增180独立统计，不声称是DOM/浏览器E2E。W2冒烟退出0，直连/代理各两次200JSON、request_id不同，首页200HTML；独立库SQLite integrity_check=ok、foreign_key_check无违规。
+- 新跨模块随机端口服务及门闩只管理本轮Process对象，finally清理临时库/Token文件，无遗留campusfix-w5d5-*目录；诊断日志保留在忽略的build/Testing目录。固定8848/5173先确认空闲再启动，最后仅清理自建后端PID40012和Vite39484，恢复环境变量，两端口监听0。用户原服务/人工库未修改或停止；无原始Token/内部备注进入服务日志。
+- W5-D4用户14/14人工通过记录原样保留，本轮无独立浏览器或截图，三处前端小修复的视觉/点击补验收未执行。API-16无乐观锁、有界读取、chunk、内存Token/离线退出/完整限流、断电/磁盘满/COMMIT I/O/高压/跨机器未测等风险继续保留；未发现本轮已测范围内未解决的高严重度服务端越权或一致性缺陷。
+- 本轮范围**修改6/新增4/删除0，共10文件**，详见docs/W5-D5-acceptance-report.md。git diff --check和新增no-index空白检查通过，暂存为空，产物/数据库/WAL/凭据仍忽略，无无关文件；未git add、commit、push。**W5-D5自动化完成，等待最终源码、Git及阶段验收；未进入W6-D1。**

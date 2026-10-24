@@ -12,7 +12,7 @@ export function managedQuery({ page = 1, status = '', category } = {}) {
 }
 export function adminError(error) {
   if (error.status === 409) return '状态或版本已变化；请重新读取后确认，不会自动重放审核。'
-  if (error.status === 422) return `字段不符合要求${error.field ? `（${error.field}）` : ''}；容量不能低于当前有效任务数，请核对输入。`
+  if (error.status === 422) return `字段不符合要求${error.field ? `（${error.field}）` : ''}；${error.field === 'max_concurrent_tasks' ? '容量须为1～100整数且不能低于当前有效任务数，' : ''}请核对输入。`
   if ([403, 404].includes(error.status)) return '权限、资源或授权范围已变化；不会请求其他区域的数据。'
   return error.message || '请求失败，请稍后重试'
 }

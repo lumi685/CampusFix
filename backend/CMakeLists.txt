@@ -69,6 +69,18 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_w5d5_fixture tests/integration/W5D5SecurityFixture.cpp)
+    target_link_libraries(campusfix_w5d5_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_w5d5_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME w5d5_security_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/W5D5SecurityHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>" -Fixture "$<TARGET_FILE:campusfix_w5d5_fixture>"
+        -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations" -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        -EvidencePath "${CMAKE_CURRENT_BINARY_DIR}/Testing/w5d5-evidence.json")
+    set_tests_properties(w5d5_security_http PROPERTIES TIMEOUT 240)
     add_executable(campusfix_worker_test tests/integration/WorkerServiceTest.cpp)
     target_link_libraries(campusfix_worker_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_worker_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
