@@ -1,4 +1,5 @@
 import { test, after } from 'node:test'
+import './supplement.test.js'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'

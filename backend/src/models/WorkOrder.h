@@ -5,6 +5,7 @@
 #include <string>
 
 namespace campusfix {
+struct OrderEditResult {std::int64_t id=0,version=0;std::string status,updatedAt;};
 struct WorkOrderInput {
     std::int64_t categoryId=0, locationId=0;
     std::string title,description,urgency,contactName,contactPhone;

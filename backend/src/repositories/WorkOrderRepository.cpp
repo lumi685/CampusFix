@@ -17,10 +17,17 @@ WorkOrder WorkOrderRepository::find(std::int64_t id) {
     return o;
 }
 void WorkOrderRepository::validateReferences(const WorkOrderInput &i) {
-    auto c=db_.prepare("SELECT 1 FROM fault_categories WHERE id=?1 AND active=1");c.bindInt(1,i.categoryId);
-    if(!c.step()) throw WorkOrderError(422,"VALIDATION_ERROR","Invalid or inactive category","category_id");
-    auto l=db_.prepare("SELECT 1 FROM locations WHERE id=?1 AND active=1");l.bindInt(1,i.locationId);
-    if(!l.step()) throw WorkOrderError(422,"VALIDATION_ERROR","Invalid or inactive location","location_id");
+    // Match CatalogRepository's effective hierarchy: an active child under an inactive
+    // ancestor is not an available option. Fixed server-owned table names only.
+    const auto valid=[&](const char *table,std::int64_t id) {
+        auto q=db_.prepare(std::string("WITH RECURSIVE ancestors(id,parent_id,active) AS (")+
+            "SELECT id,parent_id,active FROM "+table+" WHERE id=?1 UNION SELECT p.id,p.parent_id,p.active FROM "+table+
+            " p JOIN ancestors a ON p.id=a.parent_id) SELECT 1 WHERE EXISTS(SELECT 1 FROM ancestors WHERE id=?1) "
+            "AND NOT EXISTS(SELECT 1 FROM ancestors WHERE active<>1) AND EXISTS(SELECT 1 FROM ancestors WHERE parent_id IS NULL)");
+        q.bindInt(1,id);return q.step();
+    };
+    if(!valid("fault_categories",i.categoryId)) throw WorkOrderError(422,"VALIDATION_ERROR","Invalid or inactive category hierarchy","category_id");
+    if(!valid("locations",i.locationId)) throw WorkOrderError(422,"VALIDATION_ERROR","Invalid or inactive location hierarchy","location_id");
 }
 WorkOrder WorkOrderRepository::create(std::int64_t reporter,const WorkOrderInput &i,const std::string &utc) {
     auto q=db_.prepare("INSERT INTO work_orders(reporter_id,category_id,location_id,title,description,"
@@ -49,6 +56,16 @@ void WorkOrderRepository::submit(const WorkOrder &o,const std::string &number,co
     auto q=db_.prepare("UPDATE work_orders SET order_no=?1,status='PENDING_REVIEW',version=version+1,"
         "submitted_at=COALESCE(submitted_at,?2),updated_at=?2 WHERE id=?3 AND status=?4 AND version=?5");
     q.bindText(1,number);q.bindText(2,utc);q.bindInt(3,o.id);q.bindText(4,o.status);q.bindInt(5,o.version);q.step();
+    if(sqlite3_changes(db_.nativeHandle())!=1) throw WorkOrderError(409,"ORDER_VERSION_CONFLICT","Work order changed");
+}
+void WorkOrderRepository::edit(const WorkOrder &o,const WorkOrderInput &i,const std::string &utc) {
+    auto q=db_.prepare("UPDATE work_orders SET category_id=?1,location_id=?2,title=?3,description=?4,"
+        "requested_urgency=?5,contact_name=?6,contact_phone=?7,expected_visit_at=?8,updated_at=?9,version=version+1 "
+        "WHERE id=?10 AND version=?11 AND status=?12 AND status IN ('DRAFT','PENDING_SUPPLEMENT')");
+    q.bindInt(1,i.categoryId);q.bindInt(2,i.locationId);q.bindText(3,i.title);q.bindText(4,i.description);
+    q.bindText(5,i.urgency);q.bindText(6,i.contactName);q.bindText(7,i.contactPhone);
+    if(i.expectedVisitAt) q.bindText(8,*i.expectedVisitAt);else q.bindNull(8);
+    q.bindText(9,utc);q.bindInt(10,o.id);q.bindInt(11,o.version);q.bindText(12,o.status);q.step();
     if(sqlite3_changes(db_.nativeHandle())!=1) throw WorkOrderError(409,"ORDER_VERSION_CONFLICT","Work order changed");
 }
 void WorkOrderRepository::log(std::int64_t order,std::int64_t actor,const std::string &action,

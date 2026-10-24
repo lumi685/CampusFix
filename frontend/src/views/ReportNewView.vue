@@ -21,7 +21,7 @@ async function send() {
 onBeforeRouteLeave(async () => {
   if (flow.busy) return false
   if (!completed.value && (flow.draft || flow.uncertain)) {
-    try { await ElMessageBox.confirm('离开后当前页面的草稿重试信息将丢失。可在本人报修列表核查记录；本阶段不提供草稿编辑。确定离开？', '报修尚未确认完成', { type: 'warning' }); return true } catch { return false }
+    try { await ElMessageBox.confirm('离开后当前页面的草稿重试信息将丢失。可在本人报修列表打开原工单详情，继续编辑或提交。确定离开？', '报修尚未确认完成', { type: 'warning' }); return true } catch { return false }
   }
 })
 </script>

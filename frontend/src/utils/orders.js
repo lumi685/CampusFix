@@ -5,6 +5,7 @@ export const statuses = {
 }
 export const urgencies = { LOW: '低', NORMAL: '普通', HIGH: '高', URGENT: '紧急' }
 export const actions = {
+  ORDER_CONTENT_UPDATED: '补充/修改报修信息',
   ORDER_CREATED: '创建草稿', ORDER_SUBMITTED: '提交报修', ORDER_REVIEWED: '审核通过',
   ORDER_RETURNED: '退回补充', ORDER_REJECTED: '审核拒绝', ORDER_ASSIGNED: '派单',
   ORDER_ACCEPTED: '维修人员接单', ORDER_REFUSED: '拒单', TRANSFER_REQUESTED: '申请转派',

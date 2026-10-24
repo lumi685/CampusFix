@@ -19,6 +19,8 @@ public:
     TimelinePage timeline(std::int64_t authenticatedId,const std::string &token,std::int64_t id,const TimelineQuery &query);
     ReviewResult review(std::int64_t authenticatedId,const std::string &token,std::int64_t id,
                         const ReviewInput &input,const std::string &requestId);
+    OrderEditResult edit(std::int64_t authenticatedId,const std::string &token,std::int64_t id,
+                         std::int64_t expectedVersion,const WorkOrderInput &input,const std::string &requestId);
 private:
     SqliteConnection &db_;
     Clock clock_;

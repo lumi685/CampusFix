@@ -34,6 +34,7 @@ add_library(campusfix_database STATIC
     src/services/WorkOrderTimelineService.cpp
     src/repositories/ReviewRepository.cpp
     src/services/WorkOrderReviewService.cpp
+    src/services/WorkOrderEditService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium)
@@ -65,6 +66,21 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_edit_test tests/integration/WorkOrderEditTest.cpp)
+    target_link_libraries(campusfix_edit_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_edit_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    add_executable(campusfix_edit_http_fixture tests/integration/EditHttpFixture.cpp)
+    target_link_libraries(campusfix_edit_http_fixture PRIVATE campusfix_database Drogon::Drogon)
+    if(MSVC)
+        target_compile_options(campusfix_edit_test PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_edit_http_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME work_order_edit_service COMMAND campusfix_edit_test)
+    find_program(CAMPUSFIX_POWERSHELL NAMES powershell.exe REQUIRED)
+    add_test(NAME work_order_edit_http COMMAND "${CAMPUSFIX_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/WorkOrderEditHttpTest.ps1"
+        -Server "$<TARGET_FILE:campusfix_backend>" -Fixture "$<TARGET_FILE:campusfix_edit_http_fixture>" -Migrations "${CMAKE_CURRENT_SOURCE_DIR}/migrations" -Seed "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        -EvidencePath "${CMAKE_CURRENT_BINARY_DIR}/Testing/w5d2-evidence.json")
+    set_tests_properties(work_order_edit_service work_order_edit_http PROPERTIES TIMEOUT 120)
     add_executable(campusfix_review_test tests/integration/ReviewServiceTest.cpp)
     target_link_libraries(campusfix_review_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_review_test PRIVATE
