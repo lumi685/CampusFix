@@ -1,6 +1,7 @@
 #include "controllers/WorkOrderController.h"
 #include "controllers/CatalogController.h"
 #include "controllers/WorkOrderQueryController.h"
+#include "controllers/ReviewController.h"
 #include "common/ResponseUtils.h"
 #include "middleware/AuthGuard.h"
 #include "services/WorkOrderService.h"
@@ -85,6 +86,7 @@ void handle(const std::filesystem::path &path,const drogon::HttpRequestPtr &requ
 void registerWorkOrderController(const std::filesystem::path &path) {
     registerCatalogController(path);
     registerWorkOrderQueryController(path);
+    registerReviewController(path);
     drogon::app().registerHandler("/api/work-orders",authenticated(path,
         [path](const drogon::HttpRequestPtr &req,HttpCallback &&cb){handle(path,req,cb);}),{drogon::Post});
     // Drogon path extraction wraps the existing reusable Guard, never a second auth implementation.

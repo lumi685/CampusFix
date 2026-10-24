@@ -5,6 +5,7 @@
 
 namespace campusfix {
 void validateWorkOrderInput(const WorkOrderInput &input);
+void validateOrderText(const std::string &value,std::size_t max,const char *field,bool allowBlank=false);
 bool validUtcDateTime(const std::string &value);
 struct OrderTime { std::string utc,businessDate; };
 // Asia/Shanghai (UTC+08:00) for current campus business dates, not host local time.

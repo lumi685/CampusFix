@@ -393,3 +393,28 @@
 - 目录现12张图，四张新证据可见区域无密码/Token/Authorization或私人信息；G4/G5裁切的request_id不补写未知字符，G6折叠请求头不宣称已检查。图片未移动、重命名、合成或暂存，继续由build规则忽略。
 - 最终结论：**W4-D5自动化验收通过；A～G浏览器人工验收及七项附加测试通过；同一工单关联证据已由新增截图补齐；人工与自动化验收通过。**favicon404和Chrome Built-In AI提示为非阻塞问题，本轮不修复。原16/16 CTest、认证9/9、报修7/7、构建/冒烟/SQL结果保留，不写成本轮重跑；W4-D4历史失败及本轮前期补图过程均保留。
 - 本轮仅同步docs/W4-D5-manual-acceptance.md、docs/W4-D5-acceptance-report.md、docs/progress-log.md；无新建/删除，累计W4-D5仍4修改/4新增，等待用户Git文件核对及提交批准。未git add/commit/push，不进入W5。
+
+## 2026-10-24 W5-D1：管理员审核 API 与事务一致性（自动化完成，待最终验收）
+
+- 起点：main/a814f4e94eea598f95440a49627a6da082ee54e0（W4-D5 已提交），与本地 origin/main 对齐，工作区干净；本轮未 fetch。按 AGENTS 与冻结 API-13/FR-005、TC-WF-01～03、T-03/04/06 审计后实施。原两份 W1-D3 交接文件本轮实际均不存在，不创建或恢复。
+- 仅新增正式 `POST /api/work-orders/{id}/review`。APPROVE→PENDING_DISPATCH 更新确认分类/紧急度；RETURN→PENDING_SUPPLEMENT 公开退回原因；REJECT→CANCELLED 写 UTC cancelled_at，使用独立 ORDER_REJECTED。三动作均 version+1/updated_at、一条追加日志，保留原编号/首次提交时间/申报紧急度/旧事件，不创建派单，不自动维修。
+- 复用 AuthGuard、AuthService、AuthorizationService、WorkOrderStateMachine、StatusLogRepository、SqliteTransaction 和统一响应。在 BEGIN IMMEDIATE 内重新认证、读取角色/授权/位置层级/状态/版本，再用条件 UPDATE 检查行数并追加日志。dispatcher 用 AREA_SCOPE；sysadmin 用 REVIEW 自己的 scope，REVIEW 不自动授予 BUSINESS_READ 或 INTERNAL_NOTE_READ；403/保密型404遵循既有 Policy。
+- Controller 严格限制字段/类型/正整数/动作，拒绝伪造身份、目标状态、跨动作多余字段。reason 使用合法 UTF-8、非空白1～500 Unicode标量；内部备注可选字符串、无冻结数字上限，不发明长度约束。版本极值额外防止 SQLite INTEGER→REAL 与 C++ 溢出。API 成功仅 id/review_action/status/version，统一 request_id/no-store，日志不记录正文或 Token。
+- 实际新增两项 CTest：`work_order_review_service` **238 个 SQLite/Service 断言**；`work_order_review_http` **106 次正式 HTTP 请求**（含两个管理员并发的两次请求，启动探测不计数）。新纯 Policy 测试0，原授权测试回归保留。新增测试均独立临时库、虚构数据和运行时随机会话，未触碰用户人工库；测试夹具不链接进正式程序。
+- 真实 HTTP 三动作：id9/APPROVE→PENDING_DISPATCH，id10/RETURN→PENDING_SUPPLEMENT，id11/REJECT→CANCELLED，均HTTP200/version3；日志actor_id2，request_id分别为 `req_d8bb2eb7-c9c0-44ff-bb82-2b29676a469f`、`req_8b498eee-e204-4228-bad9-0f4f270fe339`、`req_d23f6907-e2ca-4c68-8e1b-a3fa92aed2d4`。仅为本次临时库样本，不与旧人工库相同ID或编号混用。原两日志逐字段保留，新增事件与响应request_id一致；详情/列表/时间线逐项核对通过。完整请求/响应、SQL时间字段见`docs/W5-D1-acceptance-report.md`及忽略的`backend/build/Testing/w5d1-evidence.json`。
+- HTTP 状态分布：200×23、400×4、401×5、403×7、404×4、409×7、422×53、500×3；三个500为预期故障注入。所有预期失败比对work_orders/status_logs/assignments/dispatch_records/order_number_sequences全部列指纹；日志失败、审核字段更新失败、取消时间写后失败均整笔回滚。Service另验证三动作日志失败及affected_rows=0。双SQLite连接APPROVE/APPROVE、APPROVE/RETURN与正式HTTP双管理员竞争均一成功一409，版本/事件仅增一次。
+- 字段安全：reporter/worker本人时间线可读公开原因，不可见内部备注；dispatcher可读授权区白名单；sysadmin无INTERNAL_NOTE_READ时无内部扩展，单独授权后可读。原始metadata不返回。HTTP测试实际扫描服务日志无原始Session Token或内部备注标记。
+- 调试如实记录：首次新HTTP测试错误地把拒绝字段名`data.field="metadata_json"`当作数据库敏感列泄漏；改为匹配实际JSON敏感键后通过，没有放宽生产数据投影。后补版本极值/断言，再次全量执行得到最终结果。
+- 实际命令：复用缓存 `cmake --build backend/build --config Debug --parallel 4` 配置/编译退出0，未见编译链接警告。原Drogon1.9.13#2、SQLite3.53.4#2、libsodium1.0.22#1不变，无新下载。最终 `ctest --test-dir backend/build -C Debug --output-on-failure` **18/18通过，退出0，39.52秒**，原W3认证/RBAC/数据库与W4全链路均回归通过；新Service及HTTP库integrity_check=ok、foreign_key_check无违规。
+- 前端未改业务代码；本轮实际运行 `npm.cmd run test:auth` **9/9**、`npm.cmd run test:orders` **7/7**、`npm.cmd run build`成功，均退出0。保留已有chunk>500kB警告（JS664.18kB/gzip220.64kB），不做无关拆包。W2真实后端/Vite冒烟退出0：直连与代理各两次200JSON、request_id不重复、首页200；只停止自建PID7104/25912，8848/5173监听0。
+- 文件范围：新增11、修改6、删除0，完整绝对路径与职责见本轮验收报告。新增源码6、测试4、报告1；修改构建/路由挂接/共享文字校验/Service声明/进度日志。未改Schema、seed、冻结需求、权限规则、依赖或前端业务；未开发API-07/12、管理UI、人员CRUD或派单。
+- Git与边界：git diff --check退出0；新增文件另做no-index检查，返回1表示新差异，不是空白失败。构建产物、SQLite/WAL、证据、node_modules/dist被忽略，暂存区保持空，未git add/commit/push。未做浏览器审核、物理COMMIT故障、断电/磁盘满、高压或跨机器验收；历史内存Token/离线退出/限流风险不变。**W5-D1自动化完成，等待用户功能、关键代码和Git文件完整性验收；不进入W5-D2。**
+
+### 2026-10-24 W5-D1：提交前 internal_note 最小修复与重验
+
+- 用户已暂存上轮17个W5-D1文件；本轮开始没有其他未暂存修改。Git根目录与其上级目录的`tatus --short`均不存在，status及未跟踪列表也无该文件，无法确认旧内容/来源；没有删除任何文件，没有运行git clean。
+- 重新核查冻结API-13/SRS/字段字典，没有internal_note明确数字上限。按用户本轮授权，改为最多2000个Unicode标量（复用既有UTF-8校验），不再使用size_t最大值。省略、空串及纯空白（空格/Tab/CR/LF/U+3000）存NULL；先限长再归一化，非空正文不trim。RETURN/REJECT公开reason仍必填、非空白1～500字符，审核权限/事务顺序/状态机/响应不变。
+- 新增Service三动作1999/2000/2001、超长空白、非法UTF-8/NUL及省略/空串/空白测试；正式HTTP三动作2000/2001汉字边界、422字段提示、失败无副作用、NULL归一化与公开原因保留。两层另验证四字节字符2000个（8000 UTF-8字节）成功、2001个拒绝。
+- 本轮实际MSVC Debug构建退出0，无编译/链接警告；全量CTest **18/18，退出0，42.50秒**。审核Service **283个SQLite/Service断言**，正式HTTP回归 **149次请求**（Review HTTP 11.88秒，已计入全量，不重复计数），新纯Policy测试0。Service/HTTP临时库integrity_check=ok、foreign_key_check无违规；原权限/状态/并发/回滚测试均通过。使用临时虚构库，不触碰用户演示库。
+- git diff --check退出0；本轮不重跑前端、浏览器或W2 Vite冒烟，上轮真实结果保留但不写成本轮实测。完整证据及说明见W5-D1验收报告第8节。
+- 本轮修改5个文件：审核Service、两份审核测试、验收报告、进度日志；新增0/删除0。用户原暂存17文件保持旧内容，5文件出现新的未暂存修改；未执行git add/commit/push，需用户自行核对并决定重新暂存。未修改冻结文件/Schema/seed、其他权限规则或后续功能，未进入W5-D2，到此暂停。

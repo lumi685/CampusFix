@@ -6,7 +6,7 @@
 namespace campusfix {
 namespace {
 void invalid(const char *field) {throw WorkOrderError(422,"VALIDATION_ERROR","Invalid work order field",field);}
-void text(const std::string &s,std::size_t max,const char *field) {
+void text(const std::string &s,std::size_t max,const char *field,bool allowBlank=false) {
     // Count Unicode scalar values (SQLite length semantics), rejecting malformed UTF-8,
     // NUL and control characters instead of allowing truncation at the SQL boundary.
     std::size_t count=0;
@@ -30,7 +30,7 @@ void text(const std::string &s,std::size_t max,const char *field) {
         if(cp!=32&&cp!=9&&cp!=10&&cp!=13&&cp!=0x3000) content=true;
         if(++count>max) invalid(field);
     }
-    if(!count||!content) invalid(field);
+    if(!allowBlank&&(!count||!content)) invalid(field);
 }
 std::tm utc(std::time_t t) {
     std::tm result{};
@@ -41,6 +41,9 @@ std::tm utc(std::time_t t) {
 #endif
     return result;
 }
+}
+void validateOrderText(const std::string &value,std::size_t max,const char *field,bool allowBlank) {
+    text(value,max,field,allowBlank);
 }
 bool validUtcDateTime(const std::string &s) {
     if(s.size()<20||s.size()>30||s[4]!='-'||s[7]!='-'||s[10]!='T'||s[13]!=':'||s[16]!=':'||s.back()!='Z') return false;
