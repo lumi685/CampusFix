@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(campusfix_dispatch STATIC
     src/dispatch/DispatchModels.cpp
     src/dispatch/DispatchStrategy.cpp
+    src/dispatch/EligibilityFilter.cpp
 )
 target_include_directories(campusfix_dispatch PUBLIC src)
 if(MSVC)
@@ -101,6 +102,12 @@ if(BUILD_TESTING)
         target_compile_options(campusfix_dispatch_domain_test PRIVATE /W4 /permissive- /utf-8)
     endif()
     add_test(NAME dispatch_domain COMMAND campusfix_dispatch_domain_test)
+    add_executable(campusfix_dispatch_eligibility_test tests/unit/EligibilityFilterTest.cpp)
+    target_link_libraries(campusfix_dispatch_eligibility_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_eligibility_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_eligibility COMMAND campusfix_dispatch_eligibility_test)
     add_executable(campusfix_ai_draft_test tests/unit/AiDraftServiceTest.cpp)
     target_link_libraries(campusfix_ai_draft_test PRIVATE campusfix_ai)
     if(MSVC)

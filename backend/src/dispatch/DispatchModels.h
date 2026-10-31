@@ -15,6 +15,10 @@ using BusinessId = std::int64_t;
 struct LocationAncestry {
     std::vector<BusinessId> ancestors;
     std::optional<BusinessId> campusId, buildingId;
+    // Server adapter has loaded the complete active chain, nearest parent first,
+    // and checked node types plus campus/building membership. Never client input.
+    // false also covers incomplete/inactive/unavailable metadata; it is NOT outside-area proof.
+    bool verified = false;
 };
 
 // A transient, server-loaded projection, NOT another persisted WorkOrder.
@@ -45,6 +49,9 @@ struct DispatchWorker {
     std::string accountStatus, accountRole; // users.status/role, not inferred from the profile.
     LocationAncestry serviceArea;
     DispatchHistory history;
+    // True only after a successful, complete read of active worker_skills/skills.
+    // An empty vector with false must NOT be interpreted as confirmed missing skill.
+    bool skillsLoaded = false;
 };
 
 // Fixed P0 order: skill, area, load, efficiency, rating, duty. No configurable weights.
@@ -63,7 +70,8 @@ struct DispatchCandidate {
 };
 enum class ExclusionReason {
     Unknown, AccountInactive, WorkerInactive, Unavailable, MissingSkill,
-    MissingCertificate, OutsideServiceArea, AtCapacity
+    MissingCertificate, OutsideServiceArea, AtCapacity,
+    AccountRoleMismatch, LocationUnverified
 };
 struct ExcludedWorker {
     BusinessId workerId = 0;

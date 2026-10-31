@@ -582,3 +582,15 @@
 - 后续映射需补齐审核紧急度、账号状态、有效技能、位置祖先/校区/建筑、实时负载及冻结6.5历史样本；跨区支持的明确授权来源尚未核实，不能偷换管理授权或放宽硬约束；未加载历史不能当成实际零样本。详见 `docs/W6-D1-acceptance-report.md`，不修改冻结Schema或需求。
 - 本轮未重跑前端/build、独立W2冒烟、AI-D3额外HTTP/快照、真实浏览器/DeepSeek及跨机器验证，不引用基线数字充作本轮结果。源码及构建范围仅纯C++模块/CMake/单测和两份记录。
 - 最终范围修改2/新增6/删除0，共8文件；git diff --check退出0，6个新增文件另做no-index空白检查，无诊断；暂存区为空，产物仍忽略，无无关未跟踪文件。不git add/commit/push/merge。**CampusFix W6-D1 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D2。**
+
+## 2026-10-31 W6-D2：EligibilityFilter硬性资格筛选
+
+- 起始分支feature/w6-dispatch，HEAD=`da6ba5a0c603b040126af8f61b4e098c9fae86c3`；工作区/暂存区干净。受限环境fetch因github.com:443连接失败；授权本机网络执行git fetch origin成功，HEAD与更新后的origin/feature/w6-dispatch一致，无清理、覆盖或切分支。
+- 依据冻结SRS第14/44～56章、FR-006/007、TC-DSP-01～04/08及数据库/API/决策与D1源码，实现独立纯C++17 EligibilityFilter，复用既有DispatchWorkOrder、WorkerRecord、WorkerSkill、SkillOption和DispatchResult。仅AVAILABLE可接单；技能/资质、账号角色及启停、人员档案有效性、区域与activeTasks<capacity均为硬约束，紧急工单/值班不能豁免。
+- 最小追加技能skillsLoaded及位置verified标记，默认关闭；技能未完整加载明确抛输入错误，不冒充确认无技能；位置未核实以LocationUnverified排除，不猜测为OutsideServiceArea。标记仅为可信服务端输入契约，未来适配器必须真实核实有效技能和完整有效位置链，不能接收客户端自报标记；无Schema/REST变更。
+- 校区区域覆盖该校区，楼宇区域只覆盖该楼宇；同校区其他楼宇不放行，缺元数据/无法确定服务区域类型失败关闭，不借用管理授权或开放跨区分支。枚举末尾新增AccountRoleMismatch/LocationUnverified，结果校验显式识别已知值并继续拒绝Unknown。
+- 固定顺序收集全部独立排除原因，每位唯一有效输入恰好出现于一组，输出按64位worker ID数值升序。候选负载/容量复制同份输入，无score/rank、无冷启动60或加权评分；此顺序不是最终得分排名。
+- 本机MSVC Debug完整构建成功，补齐显式utility头后再次完整构建成功，未见编译/链接警告；CMake自动重配成功，原依赖均already installed，无下载/升级。新增CTest dispatch_eligibility：**41场景、1019断言**，含六人混合数据全部720排列；原dispatch_domain源码不变，仍**15场景、104断言**。定向2/2退出0；最终全量**29/29、失败0、退出0、158.07秒**，原28项全部保留且通过；未累计重复执行数。
+- dumpbin确认新单测仅依赖MSVC运行库和Windows基础库；新过滤器无数据库/网络/业务写入、无全局可变状态，未接入生产路由。全量旧HTTP/SQLite/假模型测试仍在原隔离夹具执行，不冒充新调度HTTP或真实DeepSeek验收。前端、独立W2冒烟、额外AI-D3脚本、浏览器及跨机器/性能本轮未运行。
+- W6-D3前需落实原始历史数据与冻结评分、同分规则；W6-D4适配器/确认派单须重读审核字段、账号、有效技能/区域、实时容量，在事务内重新校验；跨区来源未定保持关闭。无评分、推荐REST、派单、Schema/seed、状态机、认证/授权、AI或前端变更，未提前进入下一日。
+- 完整说明、命令和文件清单见docs/W6-D2-acceptance-report.md。最终修改4/新增4/删除0，共8文件；git diff --check退出0，4个新增文件no-index空白、UTF-8及末尾换行检查通过；暂存区为空，无无关未跟踪文件，产物仍忽略。Git LF→CRLF提示保留，非空白错误。不git add/commit/push/merge。**CampusFix W6-D2 EligibilityFilter 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D3。**

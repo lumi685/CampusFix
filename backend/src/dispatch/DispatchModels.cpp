@@ -84,8 +84,22 @@ void validateResult(const DispatchResult &result, const std::vector<DispatchWork
     for (const auto &excluded : result.excluded) {
         unique(excluded.workerId);
         require(!excluded.reasons.empty(), "Excluded worker has no reason");
-        for (const auto reason : excluded.reasons)
-            require(reason >= ExclusionReason::AccountInactive && reason <= ExclusionReason::AtCapacity, "Unknown exclusion reason");
+        for (const auto reason : excluded.reasons) {
+            switch (reason) {
+            case ExclusionReason::AccountInactive:
+            case ExclusionReason::WorkerInactive:
+            case ExclusionReason::Unavailable:
+            case ExclusionReason::MissingSkill:
+            case ExclusionReason::MissingCertificate:
+            case ExclusionReason::OutsideServiceArea:
+            case ExclusionReason::AtCapacity:
+            case ExclusionReason::AccountRoleMismatch:
+            case ExclusionReason::LocationUnverified:
+                break;
+            default:
+                require(false, "Unknown exclusion reason");
+            }
+        }
     }
     // No weighted sum, eligibility verdict, ranking, or Top 3 computation here.
 }
