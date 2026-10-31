@@ -20,5 +20,8 @@ using HttpCallback=std::function<void(const drogon::HttpResponsePtr &)>;
 using GuardedHandler=std::function<void(const drogon::HttpRequestPtr &,HttpCallback &&)>;
 std::string bearerToken(const drogon::HttpRequestPtr &request);
 std::shared_ptr<const RequestIdentity> requestIdentity(const drogon::HttpRequestPtr &request);
-GuardedHandler authenticated(const std::filesystem::path &databasePath,GuardedHandler handler);
+// Default preserves existing routes; dispatch opts in to its explicit retryable
+// database-error contract without duplicating session verification.
+GuardedHandler authenticated(const std::filesystem::path &databasePath,GuardedHandler handler,
+                             bool databaseBusyAsUnavailable=false);
 }

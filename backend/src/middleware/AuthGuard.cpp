@@ -26,8 +26,8 @@ std::string bearerToken(const drogon::HttpRequestPtr &request) {
 std::shared_ptr<const RequestIdentity> requestIdentity(const drogon::HttpRequestPtr &request) {
     return request->attributes()->get<std::shared_ptr<const RequestIdentity>>(identityKey);
 }
-GuardedHandler authenticated(const std::filesystem::path &path,GuardedHandler handler) {
-    return [path,handler=std::move(handler)](const drogon::HttpRequestPtr &request,HttpCallback &&callback) {
+GuardedHandler authenticated(const std::filesystem::path &path,GuardedHandler handler,bool databaseBusyAsUnavailable) {
+    return [path,handler=std::move(handler),databaseBusyAsUnavailable](const drogon::HttpRequestPtr &request,HttpCallback &&callback) {
         const auto id=newRequestId();
         const auto token=bearerToken(request);
         if(token.empty()) {
@@ -44,6 +44,11 @@ GuardedHandler authenticated(const std::filesystem::path &path,GuardedHandler ha
         } catch(const std::invalid_argument &error) {
             reject(callback,id,drogon::k401Unauthorized,
                    std::string(error.what())=="AUTH_EXPIRED"?"AUTH_EXPIRED":"AUTH_INVALID");return;
+        } catch(const SqliteError &error) {
+            if(databaseBusyAsUnavailable&&(error.primaryCode()==SQLITE_BUSY||error.primaryCode()==SQLITE_LOCKED))
+                reject(callback,id,drogon::k503ServiceUnavailable,"DATABASE_BUSY");
+            else reject(callback,id,drogon::k500InternalServerError,"INTERNAL_ERROR");
+            return;
         } catch(const std::exception &) {
             reject(callback,id,drogon::k500InternalServerError,"INTERNAL_ERROR");return;
         }
