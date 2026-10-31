@@ -594,3 +594,16 @@
 - dumpbin确认新单测仅依赖MSVC运行库和Windows基础库；新过滤器无数据库/网络/业务写入、无全局可变状态，未接入生产路由。全量旧HTTP/SQLite/假模型测试仍在原隔离夹具执行，不冒充新调度HTTP或真实DeepSeek验收。前端、独立W2冒烟、额外AI-D3脚本、浏览器及跨机器/性能本轮未运行。
 - W6-D3前需落实原始历史数据与冻结评分、同分规则；W6-D4适配器/确认派单须重读审核字段、账号、有效技能/区域、实时容量，在事务内重新校验；跨区来源未定保持关闭。无评分、推荐REST、派单、Schema/seed、状态机、认证/授权、AI或前端变更，未提前进入下一日。
 - 完整说明、命令和文件清单见docs/W6-D2-acceptance-report.md。最终修改4/新增4/删除0，共8文件；git diff --check退出0，4个新增文件no-index空白、UTF-8及末尾换行检查通过；暂存区为空，无无关未跟踪文件，产物仍忽略。Git LF→CRLF提示保留，非空白错误。不git add/commit/push/merge。**CampusFix W6-D2 EligibilityFilter 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D3。**
+
+## 2026-10-31 W6-D3：WeightedScoreStrategy固定权重评分与稳定推荐
+
+- 起始feature/w6-dispatch，HEAD=`e0cc7dfea6799559502241236334c5456adbd6a5`，工作区/暂存区干净。助手获准本机fetch遇Recv failure: Connection was reset后按要求暂停；用户自行fetch成功并提供相同HEAD/远端SHA，继续时助手再次核对更新后的本地引用一致，不冒称助手fetch成功。未清理、reset、stash或覆盖修改。
+- 读取冻结SRS14/50、FR-007/TC-DSP、数据库6.5、API-17/18、相关决策及D1/D2源码/测试/验收。新增纯C++17 final WeightedScoreStrategy，走原公共入口校验、真实EligibilityFilter、合格历史完备性检查、六项评分与理由、严格排序和连续rank；excluded完整保留，未修改既有模型、过滤器、策略入口或D1/D2测试。
+- 固定复用p0Weights 35/20/20/10/10/5；技能level/5×100、楼宇100/合法校区覆盖70、负载100×(1-active/capacity)、效率和评价按冻结均值/冷启动、仅URGENT且值班记100。校区本身和公共区域覆盖记70，不虚构同楼宇或30分跨区；满载、证书、区域及停用约束不能靠高分绕过。
+- 历史nullopt不是零样本，合格人员任一历史未加载使整个调用明确失败；已加载0/1/2样本才取60，两指标独立判断并记录准确样本数和对应风险。3～20样本只在汇总后四舍五入，不逐样本舍入；目标60/实际30、60、120→83.3，评价4/5/4→86.7。最近20有效完成/评价归属、UTC时差和最终返工提交由未来D4适配器兑现，本日不查询SQLite或虚构历史。
+- 本轮明确分项/总分均为一位小数；总分从返回分项及既有权重复算，十分位与权重百分比整数计算确保十进制半入（80.35→80.4）。按返回总分降序、activeTasks升序、数值workerId升序，无epsilon或隐藏精度破同分；全eligible保留，Top3 HTTP拆分留待D4。
+- 本机MSVC Debug完整构建退出0，无编译/链接警告；自动配置/生成成功，依赖均already installed，无下载/升级/manifest变化。三个定向CTest **3/3、退出0、0.50秒**：原domain15场景104断言、原eligibility41场景1019断言；新增weighted_score **57场景1149断言**，含全部720排列、近似同分、历史边界、64位ID、输入不变及六组实际合成实验。最终全量CTest **30/30、失败0、退出0、156.83秒**；原29项注册/源码保留并实际通过，不累计重复执行数。
+- 六组内存实验记录输入→过滤→分项→排名→理由：普通多人、紧急值班、技能不符、满载、同分按负载/ID、全不合格；测试专用最小负载对照仅比较排序差异，不实现P1策略或声称现实最优。完整实际数值及stdout证据说明在docs/W6-D3-acceptance-report.md与忽略的CTest LastTest.log。
+- dumpbin仅见MSVC运行库/KERNEL32；评分模块无Drogon、SQLite、WinHTTP、AI、网络/业务写入或全局可变状态。未开发API-17/18、Controller、数据库适配器、事务派单、前端、P1策略或改动权限/审核/状态机/AI功能。原CTest中的隔离HTTP/SQLite/假模型回归不冒充新评分HTTP或真实模型验收。
+- 本轮前端/build、独立W2冒烟、额外AI-D3脚本、人工浏览器、真实校园数据、跨机器和性能压测未运行。D4仍需可信数据适配、管理范围授权、只读API及派单事务中的最新状态/version/容量/资格重查；跨区授权来源未定，保持关闭。
+- 最终修改2/新增4/删除0，共6文件；git diff --check退出0，4新增文件no-index空白无诊断，全部6文件UTF-8/末尾换行通过；暂存区为空，无无关未跟踪文件，构建/缓存/数据库/WAL产物仍忽略。不git add/commit/push/merge。**CampusFix W6-D3 WeightedScoreStrategy 实现与自动化验证已完成，等待人工与独立源码审查；未进入W6-D4。**

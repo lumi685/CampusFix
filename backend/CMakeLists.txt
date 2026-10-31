@@ -11,6 +11,7 @@ add_library(campusfix_dispatch STATIC
     src/dispatch/DispatchModels.cpp
     src/dispatch/DispatchStrategy.cpp
     src/dispatch/EligibilityFilter.cpp
+    src/dispatch/WeightedScoreStrategy.cpp
 )
 target_include_directories(campusfix_dispatch PUBLIC src)
 if(MSVC)
@@ -108,6 +109,12 @@ if(BUILD_TESTING)
         target_compile_options(campusfix_dispatch_eligibility_test PRIVATE /W4 /permissive- /utf-8)
     endif()
     add_test(NAME dispatch_eligibility COMMAND campusfix_dispatch_eligibility_test)
+    add_executable(campusfix_dispatch_weighted_score_test tests/unit/WeightedScoreStrategyTest.cpp)
+    target_link_libraries(campusfix_dispatch_weighted_score_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_weighted_score_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_weighted_score COMMAND campusfix_dispatch_weighted_score_test)
     add_executable(campusfix_ai_draft_test tests/unit/AiDraftServiceTest.cpp)
     target_link_libraries(campusfix_ai_draft_test PRIVATE campusfix_ai)
     if(MSVC)
