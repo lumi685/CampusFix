@@ -6,6 +6,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Pure C++ domain target: deliberately no Drogon/SQLite/JSON/AI linkage.
+add_library(campusfix_dispatch STATIC
+    src/dispatch/DispatchModels.cpp
+    src/dispatch/DispatchStrategy.cpp
+    src/dispatch/EligibilityFilter.cpp
+    src/dispatch/WeightedScoreStrategy.cpp
+)
+target_include_directories(campusfix_dispatch PUBLIC src)
+if(MSVC)
+    target_compile_options(campusfix_dispatch PRIVATE /W4 /permissive- /utf-8)
+endif()
+
 find_package(Drogon CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
@@ -52,10 +64,14 @@ add_library(campusfix_database STATIC
     src/services/WorkOrderEditService.cpp
     src/repositories/WorkerRepository.cpp
     src/services/WorkerService.cpp
+    src/repositories/DispatchRepository.cpp
+    src/repositories/AssignmentRepository.cpp
+    src/services/DispatchService.cpp
+    src/services/AssignmentService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
-target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium)
-target_link_libraries(campusfix_database PRIVATE JsonCpp::JsonCpp)
+target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium campusfix_dispatch)
+target_link_libraries(campusfix_database PUBLIC JsonCpp::JsonCpp)
 
 add_library(campusfix_http STATIC
     src/controllers/AiReportAssistantController.cpp
@@ -68,6 +84,7 @@ add_library(campusfix_http STATIC
     src/controllers/WorkOrderTimelineController.cpp
     src/controllers/ReviewController.cpp
     src/controllers/WorkerController.cpp
+    src/controllers/DispatchController.cpp
 )
 target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database campusfix_ai)
 add_executable(campusfix_backend src/main.cpp)
@@ -85,6 +102,42 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    foreach(kind repository service)
+        if(kind STREQUAL "repository")
+            set(dispatch_source DispatchRepositoryTest.cpp)
+        else()
+            set(dispatch_source DispatchServiceTest.cpp)
+        endif()
+        add_executable(campusfix_dispatch_${kind}_test tests/integration/${dispatch_source})
+        target_link_libraries(campusfix_dispatch_${kind}_test PRIVATE campusfix_database)
+        target_compile_definitions(campusfix_dispatch_${kind}_test PRIVATE
+            CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+            CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+        if(MSVC)
+            target_compile_options(campusfix_dispatch_${kind}_test PRIVATE /W4 /permissive- /utf-8)
+        endif()
+        add_test(NAME dispatch_${kind} COMMAND campusfix_dispatch_${kind}_test)
+    endforeach()
+    add_test(NAME dispatch_concurrency COMMAND campusfix_dispatch_service_test --concurrency)
+    set_tests_properties(dispatch_repository dispatch_service dispatch_concurrency PROPERTIES TIMEOUT 90)
+    add_executable(campusfix_dispatch_domain_test tests/unit/DispatchDomainTest.cpp)
+    target_link_libraries(campusfix_dispatch_domain_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_domain_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_domain COMMAND campusfix_dispatch_domain_test)
+    add_executable(campusfix_dispatch_eligibility_test tests/unit/EligibilityFilterTest.cpp)
+    target_link_libraries(campusfix_dispatch_eligibility_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_eligibility_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_eligibility COMMAND campusfix_dispatch_eligibility_test)
+    add_executable(campusfix_dispatch_weighted_score_test tests/unit/WeightedScoreStrategyTest.cpp)
+    target_link_libraries(campusfix_dispatch_weighted_score_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_weighted_score_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_weighted_score COMMAND campusfix_dispatch_weighted_score_test)
     add_executable(campusfix_ai_draft_test tests/unit/AiDraftServiceTest.cpp)
     target_link_libraries(campusfix_ai_draft_test PRIVATE campusfix_ai)
     if(MSVC)
@@ -101,6 +154,20 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
     find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
+    add_executable(campusfix_dispatch_http_fixture tests/integration/DispatchHttpFixture.cpp)
+    add_executable(campusfix_dispatch_ui_fixture tests/integration/DispatchUiFixture.cpp)
+    target_link_libraries(campusfix_dispatch_ui_fixture PRIVATE campusfix_database)
+    target_link_libraries(campusfix_dispatch_http_fixture PRIVATE campusfix_http)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_http_fixture PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_dispatch_ui_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_http COMMAND "${CAMPUSFIX_NODE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/DispatchHttpTest.mjs"
+        "$<TARGET_FILE:campusfix_backend>" "$<TARGET_FILE:campusfix_dispatch_http_fixture>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/migrations" "${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql"
+        "${CMAKE_CURRENT_BINARY_DIR}/Testing/w6d4-evidence.json")
+    set_tests_properties(dispatch_http PROPERTIES TIMEOUT 180)
     add_test(NAME ai_chat_http COMMAND "${CAMPUSFIX_NODE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/AiChatHttpTest.mjs"
         "$<TARGET_FILE:campusfix_backend>" "$<TARGET_FILE:campusfix_ai_fixture>"

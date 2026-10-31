@@ -4,6 +4,7 @@
 #include "controllers/AuthController.h"
 #include "controllers/WorkOrderController.h"
 #include "controllers/WorkerController.h"
+#include "controllers/DispatchController.h"
 #include "controllers/AiReportAssistantController.h"
 #include "infrastructure/DatabaseMigration.h"
 #include "infrastructure/DemoSeed.h"
@@ -123,6 +124,8 @@ int main(int argc, char *argv[])
         campusfix::registerWorkOrderController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         campusfix::registerWorkerController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
+        campusfix::registerDispatchController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         campusfix::registerAiReportAssistantController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});

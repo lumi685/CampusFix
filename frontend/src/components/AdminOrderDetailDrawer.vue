@@ -50,7 +50,7 @@ onBeforeUnmount(() => { sequence++ })
         </template>
       </section>
       <el-pagination v-if="total" v-model:current-page="page" :total="total" :page-size="20" :disabled="busy" layout="prev, pager, next, total" @current-change="load" />
-      <p>派单、取消、关闭及转派操作尚未开放。</p>
+      <p>有调度授权时可从智能派单入口操作；取消、关闭及转派尚未开放。</p>
     </template>
   </el-drawer>
 </template>

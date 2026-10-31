@@ -570,3 +570,69 @@
 - 本次没有附截图、工单号、请求ID、原始Network、实际DeepSeek配置、数据库文件名或额外快照，不编造、不读取用户数据库或凭据、不复用自动化临时样本冒充人工样本。取消和提交的用户通过反馈不是Codex检查过Network或数据库的声明；即使没有观察到创建请求，也不是独立数据库全量一致性证明，原37次快照的结论仅限原测试范围。
 - J窄屏与I刷新/身份隔离已由用户确认，独立多标签页、剪贴板权限拒绝等未单独反馈专项仍未验证。保留模型幻觉/危险建议、费用/第三方数据、内存Token刷新重登、离线退出撤销不确定、未知创建人工核查/非跨刷新幂等、完整限流、跨机器/高压/物理故障及大chunk/API-16等风险。
 - 本轮仅修改docs/V1.2-AI-D3-acceptance-report.md、docs/v1.2-ai-report-assistant.md、docs/progress-log.md，不改代码或数据库，不新增/删除本轮文件。**V1.2-AI-D3此前自动化与用户真实浏览器A～J人工验收通过；等待最终源码与Git审查；未进入W6或额外AI开发。**不git add/commit/push/merge。
+
+## 2026-10-31 W6-D1：纯C++调度模型与策略接口
+
+- 起始分支 `feature/w6-dispatch`、HEAD `7ed3a33cab601c45c797ac65039611ccc2235e25`；branch/status/log实际核对符合指定基线，工作区/暂存区干净。读取AGENTS及相关冻结需求、计划、数据库/API/流程/权限、现有模型与测试；本地无dispatch-design.md，未另建冻结设计。
+- 新增独立 `campusfix_dispatch` 静态库：`DispatchWorkOrder`、组合既有 `WorkerRecord` 的 `DispatchWorker`、复用 `WorkerSkill/SkillOption`、原始效率/评价样本、候选/排除结果及 `DispatchStrategy` 抽象接口。业务ID保持64位，关键输入/结果仅做结构校验；无分数与未知历史均显式可表达，不伪造冷启动60分。固定权重35/20/20/10/10/5仅定义常量，未计算加权总分。
+- 公共recommend入口接收const输入、验证后调用纯虚doRecommend；测试专用策略按显式ID排序验证确定性和可替换性，不冒充生产推荐算法。合格/排除结果分开，无排除项分数；真正资格判断仍待W6-D2，真实分项/总分、同分低负载/低ID、Top3仍待W6-D3。
+- 新增CTest `dispatch_domain`：**15场景、104断言，1/1通过、退出0**；覆盖默认安全、关键非法输入、原类型兼容、64位ID、多态、重复/排列调用、原始输入快照不变、空集合、结果分区、分数表示及未知/零历史。未将未来硬过滤/加权评分测试列为通过。
+- 完整Debug首次受限环境构建遇MSB4018/FileTracker E_ACCESSDENIED；同命令授权本机执行成功、退出0，未见编译/链接警告；CMake重新生成成功，依赖均already installed，无下载或版本变化。全量CTest **28/28、退出0、158.38秒**，原27项全部保留并实际回归通过，新增1项调度单测。
+- dumpbin确认调度测试仅依赖MSVC运行库/Windows基础库，不依赖Drogon、SQLite、JSON或AI库。调度源码无网络、数据库、业务写入或生产路由；未接入生产服务器，未改变工单状态、AI或认证行为。现有回归仍在各自隔离HTTP/SQLite夹具运行，不是新调度HTTP或真实DeepSeek验收。
+- 后续映射需补齐审核紧急度、账号状态、有效技能、位置祖先/校区/建筑、实时负载及冻结6.5历史样本；跨区支持的明确授权来源尚未核实，不能偷换管理授权或放宽硬约束；未加载历史不能当成实际零样本。详见 `docs/W6-D1-acceptance-report.md`，不修改冻结Schema或需求。
+- 本轮未重跑前端/build、独立W2冒烟、AI-D3额外HTTP/快照、真实浏览器/DeepSeek及跨机器验证，不引用基线数字充作本轮结果。源码及构建范围仅纯C++模块/CMake/单测和两份记录。
+- 最终范围修改2/新增6/删除0，共8文件；git diff --check退出0，6个新增文件另做no-index空白检查，无诊断；暂存区为空，产物仍忽略，无无关未跟踪文件。不git add/commit/push/merge。**CampusFix W6-D1 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D2。**
+
+## 2026-10-31 W6-D2：EligibilityFilter硬性资格筛选
+
+- 起始分支feature/w6-dispatch，HEAD=`da6ba5a0c603b040126af8f61b4e098c9fae86c3`；工作区/暂存区干净。受限环境fetch因github.com:443连接失败；授权本机网络执行git fetch origin成功，HEAD与更新后的origin/feature/w6-dispatch一致，无清理、覆盖或切分支。
+- 依据冻结SRS第14/44～56章、FR-006/007、TC-DSP-01～04/08及数据库/API/决策与D1源码，实现独立纯C++17 EligibilityFilter，复用既有DispatchWorkOrder、WorkerRecord、WorkerSkill、SkillOption和DispatchResult。仅AVAILABLE可接单；技能/资质、账号角色及启停、人员档案有效性、区域与activeTasks<capacity均为硬约束，紧急工单/值班不能豁免。
+- 最小追加技能skillsLoaded及位置verified标记，默认关闭；技能未完整加载明确抛输入错误，不冒充确认无技能；位置未核实以LocationUnverified排除，不猜测为OutsideServiceArea。标记仅为可信服务端输入契约，未来适配器必须真实核实有效技能和完整有效位置链，不能接收客户端自报标记；无Schema/REST变更。
+- 校区区域覆盖该校区，楼宇区域只覆盖该楼宇；同校区其他楼宇不放行，缺元数据/无法确定服务区域类型失败关闭，不借用管理授权或开放跨区分支。枚举末尾新增AccountRoleMismatch/LocationUnverified，结果校验显式识别已知值并继续拒绝Unknown。
+- 固定顺序收集全部独立排除原因，每位唯一有效输入恰好出现于一组，输出按64位worker ID数值升序。候选负载/容量复制同份输入，无score/rank、无冷启动60或加权评分；此顺序不是最终得分排名。
+- 本机MSVC Debug完整构建成功，补齐显式utility头后再次完整构建成功，未见编译/链接警告；CMake自动重配成功，原依赖均already installed，无下载/升级。新增CTest dispatch_eligibility：**41场景、1019断言**，含六人混合数据全部720排列；原dispatch_domain源码不变，仍**15场景、104断言**。定向2/2退出0；最终全量**29/29、失败0、退出0、158.07秒**，原28项全部保留且通过；未累计重复执行数。
+- dumpbin确认新单测仅依赖MSVC运行库和Windows基础库；新过滤器无数据库/网络/业务写入、无全局可变状态，未接入生产路由。全量旧HTTP/SQLite/假模型测试仍在原隔离夹具执行，不冒充新调度HTTP或真实DeepSeek验收。前端、独立W2冒烟、额外AI-D3脚本、浏览器及跨机器/性能本轮未运行。
+- W6-D3前需落实原始历史数据与冻结评分、同分规则；W6-D4适配器/确认派单须重读审核字段、账号、有效技能/区域、实时容量，在事务内重新校验；跨区来源未定保持关闭。无评分、推荐REST、派单、Schema/seed、状态机、认证/授权、AI或前端变更，未提前进入下一日。
+- 完整说明、命令和文件清单见docs/W6-D2-acceptance-report.md。最终修改4/新增4/删除0，共8文件；git diff --check退出0，4个新增文件no-index空白、UTF-8及末尾换行检查通过；暂存区为空，无无关未跟踪文件，产物仍忽略。Git LF→CRLF提示保留，非空白错误。不git add/commit/push/merge。**CampusFix W6-D2 EligibilityFilter 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D3。**
+
+## 2026-10-31 W6-D3：WeightedScoreStrategy固定权重评分与稳定推荐
+
+- 起始feature/w6-dispatch，HEAD=`e0cc7dfea6799559502241236334c5456adbd6a5`，工作区/暂存区干净。助手获准本机fetch遇Recv failure: Connection was reset后按要求暂停；用户自行fetch成功并提供相同HEAD/远端SHA，继续时助手再次核对更新后的本地引用一致，不冒称助手fetch成功。未清理、reset、stash或覆盖修改。
+- 读取冻结SRS14/50、FR-007/TC-DSP、数据库6.5、API-17/18、相关决策及D1/D2源码/测试/验收。新增纯C++17 final WeightedScoreStrategy，走原公共入口校验、真实EligibilityFilter、合格历史完备性检查、六项评分与理由、严格排序和连续rank；excluded完整保留，未修改既有模型、过滤器、策略入口或D1/D2测试。
+- 固定复用p0Weights 35/20/20/10/10/5；技能level/5×100、楼宇100/合法校区覆盖70、负载100×(1-active/capacity)、效率和评价按冻结均值/冷启动、仅URGENT且值班记100。校区本身和公共区域覆盖记70，不虚构同楼宇或30分跨区；满载、证书、区域及停用约束不能靠高分绕过。
+- 历史nullopt不是零样本，合格人员任一历史未加载使整个调用明确失败；已加载0/1/2样本才取60，两指标独立判断并记录准确样本数和对应风险。3～20样本只在汇总后四舍五入，不逐样本舍入；目标60/实际30、60、120→83.3，评价4/5/4→86.7。最近20有效完成/评价归属、UTC时差和最终返工提交由未来D4适配器兑现，本日不查询SQLite或虚构历史。
+- 本轮明确分项/总分均为一位小数；总分从返回分项及既有权重复算，十分位与权重百分比整数计算确保十进制半入（80.35→80.4）。按返回总分降序、activeTasks升序、数值workerId升序，无epsilon或隐藏精度破同分；全eligible保留，Top3 HTTP拆分留待D4。
+- 本机MSVC Debug完整构建退出0，无编译/链接警告；自动配置/生成成功，依赖均already installed，无下载/升级/manifest变化。三个定向CTest **3/3、退出0、0.50秒**：原domain15场景104断言、原eligibility41场景1019断言；新增weighted_score **57场景1149断言**，含全部720排列、近似同分、历史边界、64位ID、输入不变及六组实际合成实验。最终全量CTest **30/30、失败0、退出0、156.83秒**；原29项注册/源码保留并实际通过，不累计重复执行数。
+- 六组内存实验记录输入→过滤→分项→排名→理由：普通多人、紧急值班、技能不符、满载、同分按负载/ID、全不合格；测试专用最小负载对照仅比较排序差异，不实现P1策略或声称现实最优。完整实际数值及stdout证据说明在docs/W6-D3-acceptance-report.md与忽略的CTest LastTest.log。
+- dumpbin仅见MSVC运行库/KERNEL32；评分模块无Drogon、SQLite、WinHTTP、AI、网络/业务写入或全局可变状态。未开发API-17/18、Controller、数据库适配器、事务派单、前端、P1策略或改动权限/审核/状态机/AI功能。原CTest中的隔离HTTP/SQLite/假模型回归不冒充新评分HTTP或真实模型验收。
+- 本轮前端/build、独立W2冒烟、额外AI-D3脚本、人工浏览器、真实校园数据、跨机器和性能压测未运行。D4仍需可信数据适配、管理范围授权、只读API及派单事务中的最新状态/version/容量/资格重查；跨区授权来源未定，保持关闭。
+- 最终修改2/新增4/删除0，共6文件；git diff --check退出0，4新增文件no-index空白无诊断，全部6文件UTF-8/末尾换行通过；暂存区为空，无无关未跟踪文件，构建/缓存/数据库/WAL产物仍忽略。不git add/commit/push/merge。**CampusFix W6-D3 WeightedScoreStrategy 实现与自动化验证已完成，等待人工与独立源码审查；未进入W6-D4。**
+
+## 2026-10-31 W6-D4：真实数据推荐API与事务派单
+
+- 起始分支feature/w6-dispatch、HEAD=`1fd636322bef80ed741ae9f6c9bca8e7906ef82a`，工作区/暂存区干净；本机git fetch origin成功，HEAD与origin/feature/w6-dispatch一致，main比较落后0/领先3。未reset、stash、清理或覆盖用户修改；收尾HEAD不变。
+- 新增DispatchRepository/DispatchService、AssignmentRepository/AssignmentService及DispatchController，正式接入API-17 GET dispatch-candidates和API-18 POST assign。复用既有认证、授权范围、SQLite事务、状态机、追加日志和D2/D3生产算法，不复制评分/过滤器。AuthGuard只增加默认关闭的BUSY/LOCKED→503选项供新调度路由使用，旧路由默认行为保留。
+- 从实际SQLite读取审核分类/approved_urgency、两级资质、账号与人员有效性、有效技能、服务范围及ended_at IS NULL实时负载。完整验证active位置父链、类型/无环/校区根后才verified，保留公共AREA挂在校区/建筑/楼层的已验收语义。候选池是能覆盖本位置祖先链的全部相关档案，不分页，不提前隐藏停用/不合格人员，不泄漏无关校区人员。
+- 批量读取最终正常完成归属的效率及评价原始样本，先限定有效集合再按解析UTC/64位ID取各自最近20；返工读取当前最终result_submitted_at，Z与.000Z等价时间按ID排序。查询失败/时间异常阻断，不伪造零历史或60；实际0/1/2样本的冷启动仍只由领域算法处理。每次适配器load实测6次SELECT，无人员N+1，但历史扫描行数并非常数。
+- 推荐在同一BEGIN读快照内重验身份、Recommend权限和状态，专用HTTP连接query_only；白名单返回Top3/其余全部合格候选、六分项/样本/理由/风险和多原因排除摘要，GET不写dispatch_records或日志。派单BEGIN IMMEDIATE内重新认证授权、查状态/version/唯一有效派单/int64溢出、重读资格容量并重算最终rank；非前三理由最多500Unicode字符且不能仅空白。原子写assignment、绑定assignment_id的完整最终快照、T-11状态/version及ORDER_ASSIGNED日志，提交前再次核验身份/授权；无外部HTTP/AI调用。
+- 首轮MSVC新增测试出现auto声明类型冲突和Concurrency命名冲突，最小修复后完整Debug构建退出0，无编译/链接警告；CMake重配/生成成功，Drogon1.9.13#2、SQLite3.53.4#2、libsodium1.0.22#1等现有包均already installed，无依赖下载/升级。公共AREA过严验证及测试中的无用悬空引用在审查中修正。
+- 新增Repository **39场景132断言**，Service/Assignment **13场景125断言**，直接SQLite多连接并发 **5场景22断言**；含真实唯一索引、最终排名变化、1/2样本、返工最终时间、UTC小数/闰日、最新20条及历史故障。新HTTP **86次记录请求、151次16张业务表全列指纹、3组同步竞争**，不累计重跑；正式程序与隔离四线程复用正式路由分别验证，后者两请求真实BEGIN尝试达到2后才放第三连接写锁。三类竞争均仅一胜，HTTP状态分别200/409、409/200、422/200；独立SQLite查验仅一份派单/快照/日志，容量败方状态/version未变。
+- 真实HTTP覆盖401/403/404/409/422/500/503、严格JSON/字段/Unicode、64位ID、非Top3、技能撤销与停岗/容量最新事实、只读和故障回滚。assignment/dispatch_record/ORDER_ASSIGNED三者ID、实际actor/request_id关联一致；快照包含全部候选。插入派单/快照、更新状态、写日志失败均全表回滚；历史读取失败恢复后指纹不变；真实超时写锁返回503，放锁重试成功。日志/响应敏感值扫描通过，integrity_check=ok，foreign_key_check为空。
+- 首轮HTTP业务断言完成但Node重复等待已信号终止子进程，导致CTest失败，未记为通过。修复清理逻辑后证据/PASS只在进程、端口、临时库清理后生成；重跑定向dispatch **7/7、退出0、29.55秒**。首轮残留单个临时夹具目录经绝对路径核对后安全删除，无用户业务文件删除。原D1/D2/D3断言不变；最终全量CTest **34/34、失败0、退出0、186.03秒**。ctest -N及起始HEAD注册名对比证实原30项无遗漏，新增4项；完整命令及最终HTTP证据路径见docs/W6-D4-acceptance-report.md。
+- 最终修改5/新增16/删除0，共21文件；git diff --check退出0，新增文件独立no-index空白检查无诊断，全部UTF-8/末尾换行通过。no-index差异退出1与空白错误已区分；LF→CRLF仅Git提示。暂存区为空，无无关未跟踪文件，构建/证据JSON/数据库/WAL/SHM仍忽略。未修改冻结文档、Schema、seed、既有纯算法、状态机、认证/授权规则、AI或前端；不git add/commit/push/merge。
+- 未运行新前端/浏览器、独立W2冒烟、额外AI-D3脚本、真实DeepSeek、跨机器或生产规模压测；全量旧CTest不冒充这些未运行项目。候选历史全量扫描可能增长锁持有时间，需在不截断事实的前提下后续评估；撤销与派单按SQLite写锁顺序线性化，不宣称能看到未提交的撤销。等待人工和独立源码审查，不进入W6-D5。
+- **CampusFix W6-D4 真实推荐API与事务派单实现及自动化验证已完成，等待人工和独立源码审查；未进入W6-D5。**
+
+## 2026-10-31 W6-D5：管理员智能调度面板与真实代理联调
+
+- 起始分支feature/w6-dispatch，HEAD=`a086eab55fff2580be8802bf0d432a7e02f0ba27`；实际fetch成功，HEAD与origin/feature/w6-dispatch一致，工作区/暂存区干净。按AGENTS优先级阅读冻结调度需求、API、权限/决策、D4报告及现有前端/后端实现，没有重发明评分、资格或事务规则。
+- 新增AdminDispatchView、候选卡/六项分数/确认对话框、dispatch API及本地状态模块；将菜单占位替换为真实/admin/dispatch与/admin/dispatch/:id，AdminOrders对合法读到的待派工单提供导航。ElDialog显式局部注册，复用现有Element Plus/客户端/认证/路由，无新依赖。仅在有BUSINESS_READ时读列表/详情，DISPATCH-only保留ID/深链接入口，不借范围摘要扩权，不读取其他区域人员资料。
+- 所有候选排名、分项、总分、样本和风险来自API-17，不重算、不重排、不自动选择。空覆盖池明确说明仅该工单覆盖范围内无人员，多原因次数不当成人数。校验DTO及JS安全整数，不截断64位ID；确认POST仅发送worker_id、GET实际order_version和可选reason，非前三必填最多500Unicode字符且非空白。generation清理切换工单、权限/范围变化、退出/卸载后的晚到请求；submitting禁重复，409清旧快照，422区分资格失效和可修改字段。
+- POST超时/断网/5xx/异常回执进入unknown_result，禁止重发；只在有读取能力时核实详情，即使PENDING_ACCEPT也不冒称本次POST成功，无读取权限保持未知。200真实回执后清除旧推荐，有读取权限时刷新核实状态/负责人，未修改本地状态假装成功。
+- 新增仅测试C++DispatchUiFixture及CMake构建目标，隔离迁移/seed、随机Argon2id密码和虚构账号供真实登录；不改backend/src或生产CLI/HTTP/Schema。MSVC Debug完整构建退出0、无编译/链接警告，现有依赖already installed，无下载升级。新增35/35前端单元/安全测试通过，含实际SFC setup/watch执行与模拟状态机测试；既有auth9、orders16、admin23、security10、AI12、draft19、handoff30均实际通过，旧119/119+新35=154/154，不含HTTP6项。首次npm.ps1受执行策略阻止，使用现有npm.cmd成功，未修改系统策略或升级全局工具。
+- 独立脚本准备随机端口Drogon+真实Vite代理，真实HTTP **6/6、退出0，35次前端模块请求、10次独立16表全列指纹、4条派单关联**：Top1、非Top3有原因、冲突、最新停岗422、空候选/空覆盖池、跨范围404、无权限403及退出后旧Token401；回执与SQLiteassignment/dispatch_record/ORDER_ASSIGNED的ID及request_id一致，最终PENDING_ACCEPT/version4，integrity_check=ok、foreign_key_check为空。真实POST提交后在客户端丢回执是明确测试注入，不冒充真实断网或假后端：两次均保持未知、不重放，其中DISPATCH-only未调用列表/详情。安全证据在忽略的backend/build/Testing/w6d5-frontend-evidence.json，不记录Token/密码，不累计重跑。
+- 最终后端全量CTest **34/34、失败0、退出0、196.32秒**，包括D1～D4及旧认证/数据库/HTTP/假模型回归；按起始HEAD静态及foreach展开注册名核对原34项无遗漏，没有新增/删除CTest。Vite build退出0，JS约775.89kB/gzip252.62kB，>500kB chunk警告作为非阻塞项保留，未提高阈值掩盖。
+- **真实浏览器未验证**：按computer-use技能尝试，原生管道不存在，浏览器host unavailable、清单为空；没有页面点击、桌面/390px视觉、Console或截图证据，不能将Node/SFC/HTTP标成人工UI通过。为浏览器保留的隔离待机因环境不可用被中断（退出1），核实自建服务停止后精确删除其临时库/凭据；随后普通模式完整HTTP重跑退出0，确认进程、随机端口、临时数据库和凭据自动清理。没有删除用户业务文件。
+- 修改8/新增12/删除0，共20文件，暂存区为空、无无关未跟踪文件；git diff --check退出0，12新增文件独立no-index空白检查无诊断，全部20文件UTF-8及末尾换行通过，产物忽略范围已核对。LF→CRLF仅Git提示，非空白错误。冻结设计、Schema、seed、后端生产源码/算法、AI和依赖版本未变；不git add/commit/push/merge。完整文件清单、命令、真实证据、风险及人工验收步骤见docs/W6-D5-acceptance-report.md。
+- W6-D1～D4为已提交基线，D5代码与自动化完成，但真实浏览器验收及独立源码审查待补；W6不得宣称最终验收通过。未运行跨机器/生产压测、真实DeepSeek、独立admin:http/AI-D3全链路及独立W2冒烟，未进入W7或合并main。
+- **CampusFix W6-D5 管理员智能调度面板与端到端验收未完成（代码与自动化已完成，真实浏览器验收待补），等待独立源码审查；W6功能分支尚未合并main。**
