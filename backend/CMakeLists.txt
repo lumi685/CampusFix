@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Pure C++ domain target: deliberately no Drogon/SQLite/JSON/AI linkage.
+add_library(campusfix_dispatch STATIC
+    src/dispatch/DispatchModels.cpp
+    src/dispatch/DispatchStrategy.cpp
+)
+target_include_directories(campusfix_dispatch PUBLIC src)
+if(MSVC)
+    target_compile_options(campusfix_dispatch PRIVATE /W4 /permissive- /utf-8)
+endif()
+
 find_package(Drogon CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
@@ -85,6 +95,12 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_dispatch_domain_test tests/unit/DispatchDomainTest.cpp)
+    target_link_libraries(campusfix_dispatch_domain_test PRIVATE campusfix_dispatch)
+    if(MSVC)
+        target_compile_options(campusfix_dispatch_domain_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME dispatch_domain COMMAND campusfix_dispatch_domain_test)
     add_executable(campusfix_ai_draft_test tests/unit/AiDraftServiceTest.cpp)
     target_link_libraries(campusfix_ai_draft_test PRIVATE campusfix_ai)
     if(MSVC)

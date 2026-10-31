@@ -570,3 +570,15 @@
 - 本次没有附截图、工单号、请求ID、原始Network、实际DeepSeek配置、数据库文件名或额外快照，不编造、不读取用户数据库或凭据、不复用自动化临时样本冒充人工样本。取消和提交的用户通过反馈不是Codex检查过Network或数据库的声明；即使没有观察到创建请求，也不是独立数据库全量一致性证明，原37次快照的结论仅限原测试范围。
 - J窄屏与I刷新/身份隔离已由用户确认，独立多标签页、剪贴板权限拒绝等未单独反馈专项仍未验证。保留模型幻觉/危险建议、费用/第三方数据、内存Token刷新重登、离线退出撤销不确定、未知创建人工核查/非跨刷新幂等、完整限流、跨机器/高压/物理故障及大chunk/API-16等风险。
 - 本轮仅修改docs/V1.2-AI-D3-acceptance-report.md、docs/v1.2-ai-report-assistant.md、docs/progress-log.md，不改代码或数据库，不新增/删除本轮文件。**V1.2-AI-D3此前自动化与用户真实浏览器A～J人工验收通过；等待最终源码与Git审查；未进入W6或额外AI开发。**不git add/commit/push/merge。
+
+## 2026-10-31 W6-D1：纯C++调度模型与策略接口
+
+- 起始分支 `feature/w6-dispatch`、HEAD `7ed3a33cab601c45c797ac65039611ccc2235e25`；branch/status/log实际核对符合指定基线，工作区/暂存区干净。读取AGENTS及相关冻结需求、计划、数据库/API/流程/权限、现有模型与测试；本地无dispatch-design.md，未另建冻结设计。
+- 新增独立 `campusfix_dispatch` 静态库：`DispatchWorkOrder`、组合既有 `WorkerRecord` 的 `DispatchWorker`、复用 `WorkerSkill/SkillOption`、原始效率/评价样本、候选/排除结果及 `DispatchStrategy` 抽象接口。业务ID保持64位，关键输入/结果仅做结构校验；无分数与未知历史均显式可表达，不伪造冷启动60分。固定权重35/20/20/10/10/5仅定义常量，未计算加权总分。
+- 公共recommend入口接收const输入、验证后调用纯虚doRecommend；测试专用策略按显式ID排序验证确定性和可替换性，不冒充生产推荐算法。合格/排除结果分开，无排除项分数；真正资格判断仍待W6-D2，真实分项/总分、同分低负载/低ID、Top3仍待W6-D3。
+- 新增CTest `dispatch_domain`：**15场景、104断言，1/1通过、退出0**；覆盖默认安全、关键非法输入、原类型兼容、64位ID、多态、重复/排列调用、原始输入快照不变、空集合、结果分区、分数表示及未知/零历史。未将未来硬过滤/加权评分测试列为通过。
+- 完整Debug首次受限环境构建遇MSB4018/FileTracker E_ACCESSDENIED；同命令授权本机执行成功、退出0，未见编译/链接警告；CMake重新生成成功，依赖均already installed，无下载或版本变化。全量CTest **28/28、退出0、158.38秒**，原27项全部保留并实际回归通过，新增1项调度单测。
+- dumpbin确认调度测试仅依赖MSVC运行库/Windows基础库，不依赖Drogon、SQLite、JSON或AI库。调度源码无网络、数据库、业务写入或生产路由；未接入生产服务器，未改变工单状态、AI或认证行为。现有回归仍在各自隔离HTTP/SQLite夹具运行，不是新调度HTTP或真实DeepSeek验收。
+- 后续映射需补齐审核紧急度、账号状态、有效技能、位置祖先/校区/建筑、实时负载及冻结6.5历史样本；跨区支持的明确授权来源尚未核实，不能偷换管理授权或放宽硬约束；未加载历史不能当成实际零样本。详见 `docs/W6-D1-acceptance-report.md`，不修改冻结Schema或需求。
+- 本轮未重跑前端/build、独立W2冒烟、AI-D3额外HTTP/快照、真实浏览器/DeepSeek及跨机器验证，不引用基线数字充作本轮结果。源码及构建范围仅纯C++模块/CMake/单测和两份记录。
+- 最终范围修改2/新增6/删除0，共8文件；git diff --check退出0，6个新增文件另做no-index空白检查，无诊断；暂存区为空，产物仍忽略，无无关未跟踪文件。不git add/commit/push/merge。**CampusFix W6-D1 实现与自动化验证已完成，等待人工与源码审查；未进入W6-D2。**
