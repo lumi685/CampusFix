@@ -155,9 +155,12 @@ if(BUILD_TESTING)
     add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
     find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
     add_executable(campusfix_dispatch_http_fixture tests/integration/DispatchHttpFixture.cpp)
+    add_executable(campusfix_dispatch_ui_fixture tests/integration/DispatchUiFixture.cpp)
+    target_link_libraries(campusfix_dispatch_ui_fixture PRIVATE campusfix_database)
     target_link_libraries(campusfix_dispatch_http_fixture PRIVATE campusfix_http)
     if(MSVC)
         target_compile_options(campusfix_dispatch_http_fixture PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(campusfix_dispatch_ui_fixture PRIVATE /W4 /permissive- /utf-8)
     endif()
     add_test(NAME dispatch_http COMMAND "${CAMPUSFIX_NODE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/DispatchHttpTest.mjs"

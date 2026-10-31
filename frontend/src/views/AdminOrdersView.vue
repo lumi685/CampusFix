@@ -11,6 +11,7 @@ import AdminOrderDetailDrawer from '../components/AdminOrderDetailDrawer.vue'
 const props = defineProps({ reviewOnly: Boolean })
 const canRead = computed(() => managementAbility(authState.user, 'BUSINESS_READ'))
 const canReview = computed(() => managementAbility(authState.user, 'REVIEW'))
+const canDispatch = computed(() => managementAbility(authState.user, 'DISPATCH'))
 const items = ref([]), total = ref(0), page = ref(1), status = ref(props.reviewOnly ? 'PENDING_REVIEW' : ''), category = ref(), busy = ref(false), error = ref('')
 const detailId = ref(), reviewId = ref()
 let sequence = 0
@@ -53,7 +54,7 @@ function changed() { detailId.value = undefined; load() }
         <el-table-column label="状态" min-width="110"><template #default="{ row }"><OrderStatusTag :status="row.status" /></template></el-table-column>
         <el-table-column prop="version" label="版本" width="70" />
         <el-table-column label="创建时间" min-width="180"><template #default="{ row }">{{ dateText(row.created_at) }}</template></el-table-column>
-        <el-table-column label="操作" min-width="150"><template #default="{ row }"><el-button link type="primary" @click="detailId = row.id">详情</el-button><el-button v-if="canReview && row.status === 'PENDING_REVIEW'" link type="primary" @click="reviewId = row.id">审核</el-button></template></el-table-column>
+        <el-table-column label="操作" min-width="190"><template #default="{ row }"><el-button link type="primary" @click="detailId = row.id">详情</el-button><el-button v-if="canReview && row.status === 'PENDING_REVIEW'" link type="primary" @click="reviewId = row.id">审核</el-button><RouterLink v-if="canDispatch && row.status === 'PENDING_DISPATCH' && Number.isSafeInteger(row.id) && row.id > 0" :to="`/admin/dispatch/${row.id}`">智能派单</RouterLink></template></el-table-column>
       </el-table>
       <el-pagination v-if="total" v-model:current-page="page" :page-size="20" :total="total" :disabled="busy" layout="prev, pager, next, total" @current-change="load()" />
     </template>

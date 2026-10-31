@@ -36,7 +36,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-function safeError(status, code, requestId, timeout = false, field = '') {
+function safeError(status, code, requestId, timeout = false, field = '', reason = '') {
   let message = '请求未完成，请稍后重试'
   if (timeout) message = '连接后端超时，请稍后重试'
   else if (status === 0 || status >= 500) message = '无法连接后端或服务暂不可用，请确认后端已启动'
@@ -45,7 +45,9 @@ function safeError(status, code, requestId, timeout = false, field = '') {
   else if (status === 404) message = '资源不存在或无权访问'
   else if (status === 409) message = '工单状态或版本已变化，请核对最新数据'
   else if (status === 400 || status === 422) message = '请求字段格式不正确，请检查输入'
-  return new ApiError(message, status, code, requestId, field)
+  const result = new ApiError(message, status, code, requestId, field)
+  if (reason) result.reason = reason
+  return result
 }
 
 apiClient.interceptors.response.use(
@@ -67,6 +69,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(safeError(status, typeof body?.code === 'string' ? body.code : '',
       typeof body?.request_id === 'string' && /^req_[\w-]{1,100}$/.test(body.request_id) ? body.request_id : '',
       error.code === 'ECONNABORTED',
-      typeof body?.data?.field === 'string' && /^[a-z_]+(?:\[\d{1,6}\])?(?:\.[a-z_]+)?$/.test(body.data.field) && body.data.field.length <= 80 ? body.data.field : ''))
+      typeof body?.data?.field === 'string' && /^[a-z_]+(?:\[\d{1,6}\])?(?:\.[a-z_]+)?$/.test(body.data.field) && body.data.field.length <= 80 ? body.data.field : '',
+      status === 422 && body?.code === 'WORKER_INELIGIBLE' && ['ACCOUNT_INACTIVE', 'ACCOUNT_ROLE_MISMATCH', 'WORKER_INACTIVE', 'UNAVAILABLE', 'MISSING_SKILL', 'MISSING_CERTIFICATE', 'OUTSIDE_SERVICE_AREA', 'AT_CAPACITY', 'LOCATION_UNVERIFIED'].includes(body?.data?.reason) ? body.data.reason : ''))
   },
 )

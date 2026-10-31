@@ -622,3 +622,17 @@
 - 最终修改5/新增16/删除0，共21文件；git diff --check退出0，新增文件独立no-index空白检查无诊断，全部UTF-8/末尾换行通过。no-index差异退出1与空白错误已区分；LF→CRLF仅Git提示。暂存区为空，无无关未跟踪文件，构建/证据JSON/数据库/WAL/SHM仍忽略。未修改冻结文档、Schema、seed、既有纯算法、状态机、认证/授权规则、AI或前端；不git add/commit/push/merge。
 - 未运行新前端/浏览器、独立W2冒烟、额外AI-D3脚本、真实DeepSeek、跨机器或生产规模压测；全量旧CTest不冒充这些未运行项目。候选历史全量扫描可能增长锁持有时间，需在不截断事实的前提下后续评估；撤销与派单按SQLite写锁顺序线性化，不宣称能看到未提交的撤销。等待人工和独立源码审查，不进入W6-D5。
 - **CampusFix W6-D4 真实推荐API与事务派单实现及自动化验证已完成，等待人工和独立源码审查；未进入W6-D5。**
+
+## 2026-10-31 W6-D5：管理员智能调度面板与真实代理联调
+
+- 起始分支feature/w6-dispatch，HEAD=`a086eab55fff2580be8802bf0d432a7e02f0ba27`；实际fetch成功，HEAD与origin/feature/w6-dispatch一致，工作区/暂存区干净。按AGENTS优先级阅读冻结调度需求、API、权限/决策、D4报告及现有前端/后端实现，没有重发明评分、资格或事务规则。
+- 新增AdminDispatchView、候选卡/六项分数/确认对话框、dispatch API及本地状态模块；将菜单占位替换为真实/admin/dispatch与/admin/dispatch/:id，AdminOrders对合法读到的待派工单提供导航。ElDialog显式局部注册，复用现有Element Plus/客户端/认证/路由，无新依赖。仅在有BUSINESS_READ时读列表/详情，DISPATCH-only保留ID/深链接入口，不借范围摘要扩权，不读取其他区域人员资料。
+- 所有候选排名、分项、总分、样本和风险来自API-17，不重算、不重排、不自动选择。空覆盖池明确说明仅该工单覆盖范围内无人员，多原因次数不当成人数。校验DTO及JS安全整数，不截断64位ID；确认POST仅发送worker_id、GET实际order_version和可选reason，非前三必填最多500Unicode字符且非空白。generation清理切换工单、权限/范围变化、退出/卸载后的晚到请求；submitting禁重复，409清旧快照，422区分资格失效和可修改字段。
+- POST超时/断网/5xx/异常回执进入unknown_result，禁止重发；只在有读取能力时核实详情，即使PENDING_ACCEPT也不冒称本次POST成功，无读取权限保持未知。200真实回执后清除旧推荐，有读取权限时刷新核实状态/负责人，未修改本地状态假装成功。
+- 新增仅测试C++DispatchUiFixture及CMake构建目标，隔离迁移/seed、随机Argon2id密码和虚构账号供真实登录；不改backend/src或生产CLI/HTTP/Schema。MSVC Debug完整构建退出0、无编译/链接警告，现有依赖already installed，无下载升级。新增35/35前端单元/安全测试通过，含实际SFC setup/watch执行与模拟状态机测试；既有auth9、orders16、admin23、security10、AI12、draft19、handoff30均实际通过，旧119/119+新35=154/154，不含HTTP6项。首次npm.ps1受执行策略阻止，使用现有npm.cmd成功，未修改系统策略或升级全局工具。
+- 独立脚本准备随机端口Drogon+真实Vite代理，真实HTTP **6/6、退出0，35次前端模块请求、10次独立16表全列指纹、4条派单关联**：Top1、非Top3有原因、冲突、最新停岗422、空候选/空覆盖池、跨范围404、无权限403及退出后旧Token401；回执与SQLiteassignment/dispatch_record/ORDER_ASSIGNED的ID及request_id一致，最终PENDING_ACCEPT/version4，integrity_check=ok、foreign_key_check为空。真实POST提交后在客户端丢回执是明确测试注入，不冒充真实断网或假后端：两次均保持未知、不重放，其中DISPATCH-only未调用列表/详情。安全证据在忽略的backend/build/Testing/w6d5-frontend-evidence.json，不记录Token/密码，不累计重跑。
+- 最终后端全量CTest **34/34、失败0、退出0、196.32秒**，包括D1～D4及旧认证/数据库/HTTP/假模型回归；按起始HEAD静态及foreach展开注册名核对原34项无遗漏，没有新增/删除CTest。Vite build退出0，JS约775.89kB/gzip252.62kB，>500kB chunk警告作为非阻塞项保留，未提高阈值掩盖。
+- **真实浏览器未验证**：按computer-use技能尝试，原生管道不存在，浏览器host unavailable、清单为空；没有页面点击、桌面/390px视觉、Console或截图证据，不能将Node/SFC/HTTP标成人工UI通过。为浏览器保留的隔离待机因环境不可用被中断（退出1），核实自建服务停止后精确删除其临时库/凭据；随后普通模式完整HTTP重跑退出0，确认进程、随机端口、临时数据库和凭据自动清理。没有删除用户业务文件。
+- 修改8/新增12/删除0，共20文件，暂存区为空、无无关未跟踪文件；git diff --check退出0，12新增文件独立no-index空白检查无诊断，全部20文件UTF-8及末尾换行通过，产物忽略范围已核对。LF→CRLF仅Git提示，非空白错误。冻结设计、Schema、seed、后端生产源码/算法、AI和依赖版本未变；不git add/commit/push/merge。完整文件清单、命令、真实证据、风险及人工验收步骤见docs/W6-D5-acceptance-report.md。
+- W6-D1～D4为已提交基线，D5代码与自动化完成，但真实浏览器验收及独立源码审查待补；W6不得宣称最终验收通过。未运行跨机器/生产压测、真实DeepSeek、独立admin:http/AI-D3全链路及独立W2冒烟，未进入W7或合并main。
+- **CampusFix W6-D5 管理员智能调度面板与端到端验收未完成（代码与自动化已完成，真实浏览器验收待补），等待独立源码审查；W6功能分支尚未合并main。**

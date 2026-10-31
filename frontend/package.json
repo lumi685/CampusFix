@@ -10,6 +10,8 @@
     "test:orders": "node --test tests/orders.test.js",
     "test:admin": "node --test tests/admin.test.js",
     "test:security": "node --test tests/admin-security.test.js",
+    "test:dispatch": "node --test tests/dispatch.test.js tests/dispatch-security.test.js",
+    "test:dispatch:http": "node tests/run-dispatch-http.mjs",
     "test:ai": "node --test tests/report-assistant.test.js",
     "test:ai:draft": "node --test tests/report-draft.test.js",
     "test:ai:handoff": "node --test tests/report-draft-handoff.test.js tests/report-draft-integration.test.js",
