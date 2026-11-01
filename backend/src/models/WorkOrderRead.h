@@ -11,6 +11,7 @@ struct OrderQuery {
     std::int64_t page=1,pageSize=20;
     std::optional<std::string> status;
     std::optional<std::int64_t> categoryId;
+    bool currentOnly=false; // Assigned defaults to its original historical semantics.
 };
 struct OrderReference {std::int64_t id=0;std::string code,name;};
 // Explicit read models; credentials, storage paths and raw event JSON have no fields here.

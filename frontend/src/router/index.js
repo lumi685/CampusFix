@@ -13,6 +13,7 @@ import AdminOrdersView from '../views/AdminOrdersView.vue'
 import AdminReviewView from '../views/AdminReviewView.vue'
 import AdminWorkersView from '../views/AdminWorkersView.vue'
 import AdminDispatchView from '../views/AdminDispatchView.vue'
+import WorkerTasksView from '../views/WorkerTasksView.vue'
 import { navigation } from './navigation.js'
 import { routeAccess } from './access.js'
 
@@ -27,7 +28,7 @@ const router = createRouter({
         { path: '', name: 'welcome', component: WelcomeView },
         ...navigation.map((entry) => ({
           path: entry.path.slice(1), name: entry.id,
-          component: ({ 'report-assistant': ReportAssistantView, 'admin-orders': AdminOrdersView, 'admin-review': AdminReviewView, 'admin-workers': AdminWorkersView, 'admin-dispatch': AdminDispatchView })[entry.id] || (entry.id === 'report-new' ? ReportNewView : entry.id === 'my-orders' ? MyOrdersView : ['home', 'system'].includes(entry.id) ? HomeView : PlaceholderView),
+          component: ({ 'worker-tasks': WorkerTasksView, 'report-assistant': ReportAssistantView, 'admin-orders': AdminOrdersView, 'admin-review': AdminReviewView, 'admin-workers': AdminWorkersView, 'admin-dispatch': AdminDispatchView })[entry.id] || (entry.id === 'report-new' ? ReportNewView : entry.id === 'my-orders' ? MyOrdersView : ['home', 'system'].includes(entry.id) ? HomeView : PlaceholderView),
           meta: { requiresAuth: true, entryId: entry.id, title: entry.title },
         })),
         { path: 'orders/:id', name: 'order-detail', component: OrderDetailView, meta: { requiresAuth: true, entryId: 'my-orders', title: '工单详情' } },

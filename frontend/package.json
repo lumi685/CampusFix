@@ -12,6 +12,8 @@
     "test:security": "node --test tests/admin-security.test.js",
     "test:dispatch": "node --test tests/dispatch.test.js tests/dispatch-security.test.js",
     "test:dispatch:http": "node tests/run-dispatch-http.mjs",
+    "test:worker-tasks": "node --test tests/worker-tasks.test.js",
+    "test:worker-tasks:http": "node tests/run-worker-tasks-http.mjs",
     "test:ai": "node --test tests/report-assistant.test.js",
     "test:ai:draft": "node --test tests/report-draft.test.js",
     "test:ai:handoff": "node --test tests/report-draft-handoff.test.js tests/report-draft-integration.test.js",

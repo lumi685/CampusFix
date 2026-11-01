@@ -29,7 +29,7 @@ OrderPage WorkOrderRepository::list(std::int64_t user,const std::string &cap,con
     std::string scope;
     switch(query.view) {
     case OrderView::Reported:scope="o.reporter_id=?1";break;
-    case OrderView::Assigned:scope="EXISTS(SELECT 1 FROM assignments a JOIN workers w ON w.id=a.worker_id WHERE a.order_id=o.id AND w.user_id=?1)";break;
+    case OrderView::Assigned:scope="EXISTS(SELECT 1 FROM assignments a JOIN workers w ON w.id=a.worker_id WHERE a.order_id=o.id AND w.user_id=?1"+std::string(query.currentOnly?" AND a.ended_at IS NULL":"")+")";break;
     case OrderView::Managed:scope="(o.location_id IN (SELECT id FROM allowed_locations) OR EXISTS("
         "SELECT 1 FROM management_grants g WHERE g.user_id=?1 AND g.capability=?2 AND g.revoked_at IS NULL AND g.scope_location_id IS NULL))";break;
     }

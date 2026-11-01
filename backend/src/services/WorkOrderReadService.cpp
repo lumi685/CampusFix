@@ -8,6 +8,7 @@ namespace campusfix {
 void validateOrderQuery(const OrderQuery &q) {
     auto invalid=[](const char *field){throw WorkOrderError(422,"VALIDATION_ERROR","Invalid query parameter",field);};
     if(q.view!=OrderView::Reported&&q.view!=OrderView::Assigned&&q.view!=OrderView::Managed) invalid("view");
+    if(q.currentOnly&&q.view!=OrderView::Assigned) invalid("current_only");
     if(q.page<1) invalid("page");
     if(q.pageSize<1||q.pageSize>100) invalid("page_size");
     if(q.page-1>std::numeric_limits<std::int64_t>::max()/q.pageSize) invalid("page");

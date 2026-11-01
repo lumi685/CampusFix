@@ -636,3 +636,18 @@
 - 修改8/新增12/删除0，共20文件，暂存区为空、无无关未跟踪文件；git diff --check退出0，12新增文件独立no-index空白检查无诊断，全部20文件UTF-8及末尾换行通过，产物忽略范围已核对。LF→CRLF仅Git提示，非空白错误。冻结设计、Schema、seed、后端生产源码/算法、AI和依赖版本未变；不git add/commit/push/merge。完整文件清单、命令、真实证据、风险及人工验收步骤见docs/W6-D5-acceptance-report.md。
 - W6-D1～D4为已提交基线，D5代码与自动化完成，但真实浏览器验收及独立源码审查待补；W6不得宣称最终验收通过。未运行跨机器/生产压测、真实DeepSeek、独立admin:http/AI-D3全链路及独立W2冒烟，未进入W7或合并main。
 - **CampusFix W6-D5 管理员智能调度面板与端到端验收未完成（代码与自动化已完成，真实浏览器验收待补），等待独立源码审查；W6功能分支尚未合并main。**
+
+## 2026-10-31 W7-D1：维修员接单、拒单与当前任务工作台
+
+- 用户本次明确确认 W6 已通过测试、源码审查及浏览器验收并合并main；此为用户提供的后续阶段确认，不改写上方工具失败和待补的历史，也不冒称 Codex 独立点击过浏览器。实际 git fetch 验证 origin/main 为 `9d7b78d0afcd6b16df75a2f6d324dc88c4686503`（PR #2合并），W6末提交f8aa95e是其祖先；起始工作区/暂存区干净，main快进后新建 `feature/w7-workflow`，没有覆盖本地修改。
+- 依据 API-19/20、T-13/T-14 新增 WorkerTaskController/Service/Repository。单连接 BEGIN IMMEDIATE 内重新认证、AuthorizationService动作/归属/状态/版本校验；真实有效派单接单写 accepted_at，拒单写 ended_at/REFUSED，派单与工单版本递增、int64溢出保护，关联真实 assignment_id 的追加日志，CAS状态和最终身份复核，同事务提交/失败回滚。拒单的PENDING转派申请同事务SUPERSEDED、系统原因/解决时间、reviewed_by=NULL；不新增转派API。
+- 只读列表最小补充 assigned 专用 `current_only=true`：当前有效派单属于认证维修员，计数/分页共享服务端过滤；省略/false保持原历史Assigned语义。报告说明重复本人刚拒单只识别409，不赋历史负责人操作权。原报修人/dispatcher/有管理能力sysadmin不可冒充维修员；401/403/404/409/400/422与SQLITE_BUSY503安全处理。
+- Vue `/worker/tasks` 替换占位为真实工作台，待接/进行中分页、真实编号/分类/位置/审核紧急度/状态/版本；接单二次确认、拒单必填1～500Unicode原因、ElDialog显式注册，POST不带身份字段、不自动重试。409清旧操作、401/403/404清未授权数据；网络/5xx/异常回执保持未知，通过授权GET只读核实、不当成本请求成功证明；generation阻止换用户/退出/卸载后的晚到数据。成功后重新读取列表，不伪造本地状态，与本人报修和历史记录分离。
+- MSVC Debug完整构建退出0、未见新增编译/链接警告；CMake自动重生成，依赖均already installed，baseline、Drogon/SQLite/libsodium版本不变，无安装升级。新增CTest：worker_task_service **8场景77断言**，worker_task_concurrency **3场景12断言**，worker_task_http **8场景**。最终全量CTest **37/37、退出0、177.35秒**，原34项全部保留并实际回归通过，没有以删除失败用例获取通过。
+- 新真实HTTP **80次请求、88次独立16表全列指纹检查**，真实API-18派单开始：拒单样本order5/assignment1/version5，负载1→0、REFUSED历史/快照保留、转派失效、拒单理由及请求ID写日志；接单样本order6/assignment2/version5，IN_PROGRESS/accepted_at一致，负载1→1且不增派单。参数边界、撤销/过期/停用、非本人/历史/管理角色拒绝、三组同步并发只一200另一409、7种SQL写入故障回滚、真实忙锁503均通过。integrity_check=ok、foreign_key_check为空。证据在忽略的backend/build/Testing/w7d1-http-evidence.json，临时账号/Token不打印不提交；不累计重跑数字。
+- 新前端测试 **28/28**，加原154项，全量 **182/182、退出0**；包含真实SFC setup/watch/模板编译及模拟生命周期，不冒充浏览器。真实前端API/flow经Vite/Drogon/SQLite验证成功与服务器已提交后客户端注入丢回执的unknown_result、不重发；不是实际现场断网。npm.cmd run build退出0，JS785.76kB/gzip254.97kB，>500kB chunk警告保留。
+- 独立在自有随机端口运行正式后端（数据库路径为空）和Vite，实际 scripts/smoke.ps1 直连/代理各两次200 JSON、不同request_id及首页HTML均通过、退出0；健康检查仍不依赖SQLite。自有测试服务停止、随机端口释放，临时数据库/凭据清理，未修改用户演示数据库。
+- 保留首次失败与修复：C++测试缺少正确domain校验头；两条前端API夹具缺request_id；HTTP转派夹具列名误写expected_version后修正真实order_version；非法surrogate在JSON层应400而非字段层422。以上测试保留并复验，不修改Schema或既有安全校验来迁就夹具。
+- **本轮真实浏览器尚未验证**：computer-use native pipe不可用、Browser Use host unavailable/清单空，无页面点击、Console、390px或截图；报告列出人工接单/拒单/隔离/故障/窄屏步骤，等待补验。保留SQLite单写者/客户端先超时未知结果、内存Token、离线撤销不确定、无完整限流、JS安全整数与跨机器/压测/物理故障未验证等风险。
+- 修改10/新增15/删除0，共25文件；工作区未暂存，未修改冻结文档、Schema、seed、Policy、状态机、W6算法或AI。两份W1-D3交接文件未动，本轮无其他无关未跟踪文件；产物忽略核查通过。git diff --check及cached --check退出0，15项新增逐项独立空白检查无诊断，全部25项UTF-8严格解码/末尾换行通过；原34项CTest注册名核对无遗漏。完整范围见 `docs/W7-D1-acceptance-report.md`；无git add/commit/push/merge。
+- **CampusFix W7-D1 接单/拒单及维修员任务工作台实现与自动化验证已完成，等待独立源码审查；未进入W7-D2。**真实浏览器人工验收仍待补。

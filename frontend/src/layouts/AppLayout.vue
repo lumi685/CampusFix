@@ -29,7 +29,7 @@ async function logout() {
     <div class="content">
       <aside class="sidebar" aria-label="角色导航">
         <p class="nav-title">{{ authState.user ? roleLabels[authState.user.role] : 'CampusFix' }}</p>
-        <p class="nav-note">本人报修、授权审核、智能派单和人员管理已开放；维修与统计仍为后续功能。</p>
+        <p class="nav-note">本人报修、授权审核、智能派单、人员管理及维修接单/拒单已开放；后续维修流程与统计尚未开放。</p>
         <nav v-if="authState.user" aria-label="已授权功能入口">
           <RouterLink v-for="entry in entries" :key="entry.id" :to="entry.path">{{ entry.title }}</RouterLink>
         </nav>

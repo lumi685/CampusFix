@@ -68,6 +68,8 @@ add_library(campusfix_database STATIC
     src/repositories/AssignmentRepository.cpp
     src/services/DispatchService.cpp
     src/services/AssignmentService.cpp
+    src/repositories/WorkerTaskRepository.cpp
+    src/services/WorkerTaskService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium campusfix_dispatch)
@@ -85,6 +87,7 @@ add_library(campusfix_http STATIC
     src/controllers/ReviewController.cpp
     src/controllers/WorkerController.cpp
     src/controllers/DispatchController.cpp
+    src/controllers/WorkerTaskController.cpp
 )
 target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database campusfix_ai)
 add_executable(campusfix_backend src/main.cpp)
@@ -102,6 +105,15 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_worker_task_test tests/integration/WorkerTaskServiceTest.cpp)
+    target_link_libraries(campusfix_worker_task_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_worker_task_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_worker_task_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME worker_task_service COMMAND campusfix_worker_task_test)
+    add_test(NAME worker_task_concurrency COMMAND campusfix_worker_task_test --races)
+    set_tests_properties(worker_task_service worker_task_concurrency PROPERTIES TIMEOUT 90)
     foreach(kind repository service)
         if(kind STREQUAL "repository")
             set(dispatch_source DispatchRepositoryTest.cpp)
@@ -154,6 +166,13 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
     find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
+    add_executable(campusfix_worker_task_http_fixture tests/integration/WorkerTaskHttpFixture.cpp)
+    target_link_libraries(campusfix_worker_task_http_fixture PRIVATE campusfix_http)
+    if(MSVC)
+        target_compile_options(campusfix_worker_task_http_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME worker_task_http COMMAND "${CAMPUSFIX_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../frontend/tests/run-worker-tasks-http.mjs")
+    set_tests_properties(worker_task_http PROPERTIES TIMEOUT 120)
     add_executable(campusfix_dispatch_http_fixture tests/integration/DispatchHttpFixture.cpp)
     add_executable(campusfix_dispatch_ui_fixture tests/integration/DispatchUiFixture.cpp)
     target_link_libraries(campusfix_dispatch_ui_fixture PRIVATE campusfix_database)

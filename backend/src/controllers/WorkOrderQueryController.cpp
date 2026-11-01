@@ -27,13 +27,18 @@ Json::Value summary(const OrderSummary &s) {
 }
 OrderQuery query(const drogon::HttpRequestPtr &request) {
     const auto &params=request->parameters();
-    static const std::set<std::string> names={"view","page","page_size","status","category_id"};
+    static const std::set<std::string> names={"view","page","page_size","status","category_id","current_only"};
     for(const auto &p:params) if(!names.count(p.first)) throw WorkOrderError(422,"VALIDATION_ERROR","Unknown query parameter",p.first);
     OrderQuery q;const auto view=request->getParameter("view");
     if(view=="reported") q.view=OrderView::Reported;
     else if(view=="assigned") q.view=OrderView::Assigned;
     else if(view=="managed") q.view=OrderView::Managed;
     else throw WorkOrderError(422,"VALIDATION_ERROR","Specify reported, assigned or managed view","view");
+    if(params.count("current_only")) {
+        const auto flag=request->getParameter("current_only");
+        if(q.view!=OrderView::Assigned||(flag!="true"&&flag!="false"))throw WorkOrderError(422,"VALIDATION_ERROR","current_only is an assigned-view boolean","current_only");
+        q.currentOnly=flag=="true";
+    }
     if(params.count("page")) q.page=positive(request->getParameter("page"),"page");
     if(params.count("page_size")) q.pageSize=positive(request->getParameter("page_size"),"page_size");
     if(params.count("category_id")) q.categoryId=positive(request->getParameter("category_id"),"category_id");
