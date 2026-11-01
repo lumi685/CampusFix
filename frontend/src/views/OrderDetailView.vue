@@ -6,6 +6,7 @@ import { dateText, urgencies, orderError } from '../utils/orders.js'
 import OrderStatusTag from '../components/OrderStatusTag.vue'
 import OrderTimeline from '../components/OrderTimeline.vue'
 import OrderEditForm from '../components/OrderEditForm.vue'
+import OrderVerifyPanel from '../components/OrderVerifyPanel.vue'
 import { authState } from '../stores/auth.js'
 import { ownsReportedOrder, latestReturn } from '../utils/orderSupplement.js'
 const route = useRoute(), detail = ref(null), items = ref([]), busy = ref(false), error = ref(''), timelineError = ref(''), page = ref(1), total = ref(0), timelineBusy = ref(false)
@@ -39,7 +40,7 @@ async function loadTimeline(parentSequence = sequence) {
     items.value = data.items; total.value = data.total
   } catch (e) {
     if (parentSequence === sequence && request === timelineSequence) {
-      if ([401, 403, 404].includes(e.status)) { detail.value = null; error.value = orderError(e) }
+      if ([401, 403, 404].includes(e.status)) forgetVerification(orderError(e))
       else timelineError.value = orderError(e)
     }
   } finally { if (parentSequence === sequence && request === timelineSequence) timelineBusy.value = false }
@@ -62,7 +63,8 @@ async function load() {
   } catch (e) { if (request === sequence) error.value = orderError(e) }
   finally { if (request === sequence) busy.value = false }
 }
-watch(() => route.params.id, load, { immediate: true })
+function forgetVerification(message) { sequence++; timelineSequence++; reasonSequence++;detail.value=null;items.value=[];owner.value=false;editing.value=false;returned.value=null;returnError.value='';ownerError.value='';timelineError.value='';total.value=0;page.value=1;error.value=message;busy.value=false;timelineBusy.value=false }
+watch(() => [route.params.id,authState.status,authState.user?.id,authState.user?.role].join('|'), () => { if(authState.status==='authenticated')load();else forgetVerification('请重新登录，旧工单资料已清除。') }, { immediate: true, flush:'sync' })
 onBeforeUnmount(() => { sequence++; timelineSequence++; reasonSequence++ })
 </script>
 <template>
@@ -95,7 +97,8 @@ onBeforeUnmount(() => { sequence++; timelineSequence++; reasonSequence++ })
       <el-alert v-if="ownerError" :title="`尚未确认原报修人身份：${ownerError}`" type="warning" :closable="false" />
       <el-button v-if="owner && !editing" type="primary" @click="editing = true">补充信息 / 编辑</el-button>
       <OrderEditForm v-if="owner && editing" :key="detail.id" :detail="detail" @saved="saved" @complete="load" @refresh="load" />
-      <p v-else>仅原报修人的草稿或待补充工单可以编辑。取消、验收、评价与图片功能尚未开放。</p>
+      <p v-else>仅原报修人的草稿或待补充工单可以编辑。取消、评价与图片功能尚未开放。</p>
+      <OrderVerifyPanel v-if="detail.status==='PENDING_VERIFY'" :key="`${detail.id}:${detail.version}`" :detail="detail" @changed="load" @forbidden="forgetVerification('身份、权限或资源变化，旧工单已清除。')" @stale="forgetVerification('状态或版本变化，请重新获取工单。')"/>
       <h2>公开时间线</h2>
       <el-alert v-if="timelineError" :title="timelineError" type="error" :closable="false" />
       <el-button v-if="timelineError" @click="loadTimeline()">重新加载时间线</el-button>

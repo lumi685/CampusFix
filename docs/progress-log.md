@@ -684,3 +684,18 @@
 - **真实浏览器桌面、390px、Console及页面交互未验证**。computer-use技能检查本机窗口枚举可用，但专用浏览器连接为空/host unavailable；未输入用户密码、未登录或截图，不虚构用户人工结论。完整人工补验步骤见 `docs/W7-D3-acceptance-report.md`。
 - 结项修改11/新增8/删除0，共19文件全部未暂存；git diff --check、暂存区空白检查及全文件严格UTF-8/末尾换行、新增文件空白检查通过。保护基线无变化，构建/依赖/SQLite/WAL/证据均忽略，无无关未跟踪项；8848/5173无监听。保留内存Token、未知回执、离线撤销、限流/跨机器/物理故障/大chunk等既有风险。完整清单与真实HTTP/SQLite证据见验收报告。
 - **CampusFix W7-D3 维修结果提交与待验收流转实现与自动化验证已完成，等待独立源码审查；未进入W7-D4。**未git add/commit/push/merge，等待人工及独立源码审查。
+
+### W7-D4 — 原报修人验收与返工（2026-11-01）
+
+- 起始分支feature/w7-workflow，HEAD `6972bcf4bc80b9cd96d3fd4f57f026119b8add90`；fetch成功，本地/远端一致，工作区和暂存区干净。仅实现FR-009/API-24/T-20/T-21，不开发W7-D5评价、关闭/归档，不改冻结Schema/seed、契约或W6调度/评分/容量口径。
+- 新增VerificationService/Repository，现有WorkflowController复用严格JSON解析/统一JSON/request_id注册verify。主要角色reporter/worker且数据库reporter_id=有效Session用户才有资格；复用D-017及VerifyPass/Fail，不信任客户端身份/状态，不给当前/历史维修员或具有管理授权的sysadmin代验收能力。
+- 单连接BEGIN IMMEDIATE内重认证、归属/状态/版本核查、真实有效已接单派单/结果/时间校验；通过条件更新COMPLETED/工单version+1/completed_at，原派单end_reason=COMPLETED、ended_at、version+1，实际负载-1；返工只IN_PROGRESS/工单version+1/rework_count+1，保留原派单整行、摘要/接单/结果时间和负载，不重新推荐或派单。日志真实actor/assignment/UTC/request_id，返工公开reason及白名单rework_count；行数、int64、时间顺序和提交前认证/数据库不变量复核失败均回滚。没有自动关闭、评价或调整评分。
+- 新增verification_service **7场景100断言**、verification_concurrency **5场景15断言**，包括角色/归属、D-017、完整多轮返工重提、时间和历史、W6实际负载/历史效率样本、溢出/不一致数据、所有写入节点ABORT/IGNORE零行失败、事务末尾停用账号。原45项CTest全部保留，新增3项共48；首轮全量 **48/48、退出0、282.35秒**，随后加强每轮返工派单整行不变断言，最终全量复核结果见验收报告结项。Debug完整构建退出0，无新编译/链接警告，既有依赖缓存复用，无安装或升级。
+- 真实Vite→Drogon→临时SQLite **8场景、289HTTP、216次独立连接16表全内容指纹**，不与重跑累计。全部正常前置经实际创建→提交→审核→派单→接单→维修提交，不直接UPDATE伪造API操作。样本工单5通过版本6→7、同派单结束COMPLETED、completed_at/ended_at一致、负载1→0；工单6实际A→返工→B→通过，版本6→7→8→9，返工次数1，负载1→1→1→0，A/B与原因/全部旧派单及调度历史保留，最终result_submitted_at来自B，现有W6适配器真实效率样本分钟数匹配最终提交。另worker02本人报修由worker01维修，worker01代验收403，worker02可返工并最终通过，符合D-017。
+- 两个请求均实际尝试BEGIN后由第三连接释放锁，覆盖通过/通过、通过/返工、返工/返工、verify/complete及verify/进度；每单一条验收结果日志。前3组一个200/一个409；派单结束后worker失去写权限的403保持原语义。HTTP通过路径工单/派单/日志及返工路径工单/日志5节点故障500均全表回滚；真实BUSY503指纹不变；服务端已提交但客户端丢失回执仍未知，只GET核实、不重发。临时库integrity_check=ok、foreign_key_check为空，测试自有进程/随机端口与库/凭据清理，不操作用户演示库。
+- 新增OrderVerifyPanel/verification API/verifyFlow。原报修人资格使用服务端reported分页（复用ownsReportedOrder加严格页/ID核验）；完整公开历史扫描、页数量/total/UTC+ID排序/去重及前后真实详情版本栅栏确认本轮最新ORDER_COMPLETED，不能用第一页旧结果或私有字段。上限50页/5000条，超限/错误/漂移失败关闭。完整公开返工事件计数用于严格验证回执次数，数据库仍权威。真正二次确认，500Unicode原因，提交锁定；422留草稿，409清旧上下文/父详情，401/403/404清资料，异常200/网络/5xx未知不重发；成功重读详情/时间线，账号/路由/卸载防迟到覆盖。返工后原WorkerTasks/完整API-23继续可用。
+- 前端原241项全部保留，新增29，全量 **270/270、退出0**，含实际SFC、归属和100条边界/同时间戳、本轮结果/响应字段、未知与身份切换；不是浏览器E2E。Node24.18.1/npm11.16.0，Vite生产构建退出0，JS819.55kB/gzip263.35kB，保留原>500kB警告。真实HTTP进程内启动服务并执行既有W2 smoke.ps1退出0，直连/代理JSON及首页通过。
+- 首次失败及修复保留：新测试曾将结束派单后的旧worker固定预期409、范围外管理员预期403，按原Policy真实403/404修正新用例，未改授权；并发返工测试漏reason出现422/422，补齐合法竞争输入，保留缺原因负例。未删除/放宽原断言。
+- **真实浏览器桌面/390px/Network/Console未验证**。依computer-use技能检查连接返回apps/browsers空及host/native pipe不可用；没有登录/截图/用户反馈，不冒称人工通过。保留内存Token、未知回执、离线撤销、限流/压测/跨机/物理故障/大chunk等风险，新增有界历史超限关闭入口的限制已记录。
+- 本轮预期修改6/新增11/删除0，共17文件，全部未暂存；完整源文件、HTTP/SQLite证据与最终Git、编码及全量结果见 `docs/W7-D4-acceptance-report.md`。不git add/commit/push/merge，不进入W7-D5，等待独立源码及人工验收。
+- 最终结项：加强每轮派单整行不变断言后完整CTest **48/48、失败0、退出0、280.02秒**，前端最终 **270/270** 和构建通过；身份失效/时间线401/403/404同时清除旧退回原因、分页和操作提示。真实HTTP8/289/216、W2冒烟0、完整性ok/FK空；原45项CTest核对遗漏0。Git6修改/11新增/0删除全部未暂存、空白/UTF-8/换行及保护基线核查通过，8848/5173无监听。上述首次失败历史保留，不累计重跑数字。**CampusFix W7-D4 原报修人验收与返工实现与自动化验证已完成，等待独立源码审查；未进入W7-D5。**浏览器人工验收待补。

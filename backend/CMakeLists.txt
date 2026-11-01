@@ -76,6 +76,8 @@ add_library(campusfix_database STATIC
     src/services/ProgressEventService.cpp
     src/repositories/CompletionRepository.cpp
     src/services/CompletionService.cpp
+    src/repositories/VerificationRepository.cpp
+    src/services/VerificationService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium campusfix_dispatch)
@@ -113,6 +115,15 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_verification_test tests/integration/VerificationTest.cpp)
+    target_link_libraries(campusfix_verification_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_verification_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_verification_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME verification_service COMMAND campusfix_verification_test)
+    add_test(NAME verification_concurrency COMMAND campusfix_verification_test --races)
+    set_tests_properties(verification_service verification_concurrency PROPERTIES TIMEOUT 90)
     add_executable(campusfix_completion_test tests/integration/CompletionTest.cpp)
     target_link_libraries(campusfix_completion_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_completion_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
@@ -199,6 +210,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
     find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
+    add_test(NAME verification_http COMMAND "${CAMPUSFIX_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../frontend/tests/run-verification-http.mjs")
+    set_tests_properties(verification_http PROPERTIES TIMEOUT 240)
     add_test(NAME completion_http COMMAND "${CAMPUSFIX_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../frontend/tests/run-completion-http.mjs")
     set_tests_properties(completion_http PROPERTIES TIMEOUT 240)
     add_executable(campusfix_workflow_http_fixture tests/integration/WorkflowHttpFixture.cpp)

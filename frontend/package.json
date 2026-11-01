@@ -16,6 +16,8 @@
     "test:worker-tasks:http": "node tests/run-worker-tasks-http.mjs",
     "test:workflow": "node --test tests/workflow.test.js",
     "test:completion": "node --test tests/completion.test.js",
+    "test:verification": "node --test tests/verification.test.js",
+    "test:verification:http": "node tests/run-verification-http.mjs",
     "test:completion:http": "node tests/run-completion-http.mjs",
     "test:workflow:http": "node tests/run-workflow-http.mjs",
     "test:ai": "node --test tests/report-assistant.test.js",
