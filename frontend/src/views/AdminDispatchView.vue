@@ -9,6 +9,7 @@ import { dispatchFlow, dispatchId, dispatchFailure, scoreLabels, exclusionRows, 
 import DispatchCandidateCard from '../components/DispatchCandidateCard.vue'
 import DispatchAssignDialog from '../components/DispatchAssignDialog.vue'
 import OrderStatusTag from '../components/OrderStatusTag.vue'
+import TransferQueue from '../components/TransferQueue.vue'
 
 const route = useRoute(), router = useRouter()
 const canDispatch = computed(() => authState.status === 'authenticated' && managementAbility(authState.user, 'DISPATCH'))
@@ -39,6 +40,12 @@ async function confirm() {
   try { await flow.send(); if (flow.phase === 'success') await loadList() }
   catch (e) { flow.message = e.message }
 }
+async function recommendAfterTransfer(id) {
+  if (!canDispatch.value || ['submitting','unknown_result'].includes(flow.phase)) return
+  flow.clear()
+  if (String(route.params.id || '') === String(id)) await flow.load(id)
+  else await open(id)
+}
 watch(() => [route.params.id || '', authState.status, authState.user?.id || '', authState.user?.role || '', (authState.user?.capabilities || []).join(','), (authState.user?.scope_location_ids || []).join(',')].join('|'), () => {
   flow.clear(); ++listGeneration; list.value = []; total.value = 0; listError.value = ''; listBusy.value = false; entryError.value = ''
   inputId.value = route.params.id || ''
@@ -53,6 +60,7 @@ onBeforeUnmount(() => { flow.clear(); ++listGeneration; list.value = [] })
     <h1>智能派单</h1><p class="intro">先看真实推荐，再由管理员确认。评分只作建议，服务端始终负责资格、授权和事务一致性。</p>
     <el-alert v-if="!canDispatch" title="当前身份没有调度入口权限，旧数据已清除。" type="warning" :closable="false" />
     <template v-else>
+      <TransferQueue :order-id="route.params.id || null" :blocked="['submitting','unknown_result'].includes(flow.phase)" @recommend="recommendAfterTransfer" @changed="loadList()" @forbidden="flow.clear()"/>
       <section class="selector" aria-label="选择工单">
         <el-form @submit.prevent="open(inputId)"><el-form-item label="工单ID"><el-input v-model="inputId" :disabled="flow.phase === 'submitting'" placeholder="输入正整数工单ID" aria-label="调度工单ID" /></el-form-item><el-button native-type="submit" :disabled="flow.phase === 'submitting'">读取推荐</el-button></el-form>
         <el-alert v-if="entryError" :title="entryError" type="error" :closable="false" />

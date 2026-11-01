@@ -120,6 +120,19 @@
 - 影响：仅前端模块/测试及V1.2扩展文档，无新增REST端点；不改后端模型/目录/工单模块、Schema、seed、冻结API、状态机/编号/权限。所有文本不可信、按文本渲染，前端会话/确认不是后端授权的替代品。
 - 验收边界：实际Vue生命周期/内存路由、独立临时库正式HTTP与本地假模型可自动验证，不能冒充真实浏览器/DeepSeek；A～J及390px仍待用户独立验收。保留内存Token刷新重登、离线撤销不确定、模型幻觉、数据/费用不可撤回及现有安全风险；不进入W6或AI-D4。
 
+## W7-D2 受控补充
+
+### D-021 转派申请最小授权查询接口
+
+- 日期：2026-11-01；状态：已接受（用户正式批准）。
+- 问题：API-21/22只有写接口；时间线为历史审计且转派ID受管理字段白名单限制，不能证明申请仍可审批。仅有DISPATCH的sysadmin也不能借此取得BUSINESS_READ或INTERNAL_NOTE_READ。
+- 决定：新增API-34 `GET /api/transfer-requests`，必填view=mine|managed，支持page/page_size（默认1/20，最大100）及可选正整数order_id；created_at DESC,id DESC稳定排序。
+- 授权：mine只允许worker读取requested_by=认证用户的本人申请及公开审批结果，包括历史；managed按dispatcher AREA_SCOPE或sysadmin DISPATCH自身范围，仅返回关联当前有效派单、工单为PENDING_ACCEPT/IN_PROGRESS的真实PENDING申请。没有有效能力或角色非法拒绝，跨区order_id和不存在筛选都返回空结果，不额外泄露存在性。
+- 白名单：申请ID、工单ID/编号、派单ID、原因、申请状态/时间、当前工单状态/版本、公开审批理由/解决时间；无联系方式、内部备注、原始metadata、凭据或文件路径。order_version来自当前work_orders，不是申请历史快照。
+- 一致性：专用query_only连接、同一只读事务认证/计数/分页；重叠授权不重复。API-22仍在BEGIN IMMEDIATE重查授权、申请、状态版本和有效派单，不相信GET结果。
+- 替代方案：拒绝管理员猜ID、从分页历史时间线推断PENDING、扩张详情/内部备注权限或新增大型管理系统；单个最小只读接口支持既有审批业务。
+- 冻结影响：在原16表/33接口基线上受控增加第34接口，不新增FR、表、角色/能力码，不修改既有API及其字段可见性。最小同步SRS接口索引、需求追踪、API契约及UI说明；原冻结与历史验收记录保留。
+
 ## 新决策模板
 
 ### D-XXX （标题待定）

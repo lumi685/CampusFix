@@ -159,6 +159,8 @@
 
 ### 5.5 维修任务 `/worker/tasks`
 
+- W7-D2 / D-021：使用API-34 view=mine按真实工单ID读取本人申请及公开审批结果，历史申请不当成当前PENDING；申请、到场/进度后刷新真实时间线。申请及事件均不递增工单版本。
+
 ```text
 ┌─ 我的维修任务 ─────────────────────────────────────┐
 │ [待接单 2] [处理中 3] [待验收 1] [历史任务]         │
@@ -209,6 +211,8 @@
 - 未获得对应 capability 的按钮不渲染；直接 API 调用仍可能 403/404。
 
 ### 5.8 调度 `/admin/dispatch/:id`
+
+- W7-D2 / D-021：API-34 view=managed提供分页待审批队列，可按工单ID筛选；必须从实际返回项选择request_id和当前order_version，再二次确认API-22。只有DISPATCH而没有BUSINESS_READ/INTERNAL_NOTE_READ的sysadmin使用此最小队列，不调用详情/时间线，不借此读取内部备注。批准后刷新队列，重新派单必须回既有API-17/18，不自动分配。
 
 ```text
 ┌─ 智能调度 · WX...001 ──────────────────────────────┐
@@ -296,10 +300,10 @@
 | ReportNewView | API-04、05 | 创建 API-06；上传/删除 API-28/30；提交 API-08 |
 | MyOrdersView | API-09 | 新建仅路由跳转 |
 | OrderDetailView | API-10、11、26、29 | 编辑 API-07；提交 API-08；取消 API-12；验收 API-24；评价 API-25 |
-| WorkerTasksView | API-09、10、11、29 | 接单 API-19；拒单 API-20；转派申请 API-21；到场/进度 API-33；上传/删除 API-28/30；完工 API-23 |
+| WorkerTasksView | API-09、10、11、29、34（mine，本人历史申请） | 接单 API-19；拒单 API-20；转派申请 API-21；到场/进度 API-33；上传/删除 API-28/30；完工 API-23 |
 | WorkerProfileView | API-14、15 | 无（只读） |
 | AdminOrdersView | API-09、10、11、26 | 审核 API-13；取消 API-12；转派审批 API-22；关闭 API-27 |
-| DispatchView | API-10、17 | 派单 API-18 |
+| DispatchView | API-10（有BUSINESS_READ才调用）、17、34（managed，独立DISPATCH范围） | 派单 API-18；从真实队列选择申请审批 API-22 |
 | AdminWorkersView | API-14、15 | 更新 API-16 |
 | AdminDashboardView | API-31、32 | 指标卡只做路由筛选 |
 

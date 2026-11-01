@@ -1706,8 +1706,11 @@ Base URL：`/api`；JSON 使用 UTF-8，HTTP 状态码与业务码同时使用�
 | API-31 | `GET /api/dashboard/summary` | 授权范围内看板摘要 |
 | API-32 | `GET /api/statistics/work-orders` | 固定 submitted_at 队列口径的基础统计 |
 | API-33 | `POST /api/work-orders/{id}/progress-events` | 当前负责人追加 ARRIVED/PROGRESS_NOTE；状态不变 |
+| API-34 | `GET /api/transfer-requests` | D-021受控补充：本人历史申请/授权范围内真实待审队列；最小只读白名单 |
 
 API-01～API-33 的详细 DTO、权限、数据库效果、正常/失败示例与测试引用以 `api-contract.md` 为准。第 24 章是资源概览；若编号或字段冲突，以本节冻结编号为准。
+
+W7-D2依据用户已接受D-021新增API-34，解决审批申请发现缺口；原33接口冻结历史保留。当前接口基线含该最小只读补充，详细查询契约以api-contract.md的API-34为准，不改变原状态机/Schema/详情和时间线权限。
 
 # 50. 智能调度的可检验算法规范（新增）
 

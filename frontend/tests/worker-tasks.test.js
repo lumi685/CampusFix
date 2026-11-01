@@ -78,7 +78,7 @@ function actualView(role='worker',list=async()=>page()){
   assert.deepEqual(compileTemplate({source:descriptor.template.content,filename:'WorkerTasksView.vue',id:'w7d1'}).errors,[])
   const code=compileScript(descriptor,{id:'w7d1',genDefaultAs:'component'}).content.replace(/^import .*$/gm,'')
   const auth=reactive({status:'authenticated',user:{id:7,role}}),cleanups=[],scope=effectScope()
-  const component=new Function('computed','reactive','watch','onBeforeUnmount','ElDialog','authState','workerTasks','taskAction','refusalReason','orderDetail','workerTaskFlow','OrderStatusTag',`${code};return component`)(computed,reactive,watch,fn=>cleanups.push(fn),{},auth,list,async()=>receipt(),refusalReason,async()=>({id:9,status:'IN_PROGRESS',version:5}),workerTaskFlow,{})
+  const component=new Function('computed','reactive','watch','onBeforeUnmount','ElDialog','authState','workerTasks','taskAction','refusalReason','orderDetail','workerTaskFlow','OrderStatusTag','WorkerWorkflowPanel','WorkerTransferHistory',`${code};return component`)(computed,reactive,watch,fn=>cleanups.push(fn),{},auth,list,async()=>receipt(),refusalReason,async()=>({id:9,status:'IN_PROGRESS',version:5}),workerTaskFlow,{},{},{})
   const view=scope.run(()=>component.setup({},{expose(){}}));return {view,auth,dispose(){for(const c of cleanups)c();scope.stop()}}
 }
 test('actual compiled SFC registers dialog and worker-only route navigation remains separated',async()=>{

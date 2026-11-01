@@ -651,3 +651,20 @@
 - **本轮真实浏览器尚未验证**：computer-use native pipe不可用、Browser Use host unavailable/清单空，无页面点击、Console、390px或截图；报告列出人工接单/拒单/隔离/故障/窄屏步骤，等待补验。保留SQLite单写者/客户端先超时未知结果、内存Token、离线撤销不确定、无完整限流、JS安全整数与跨机器/压测/物理故障未验证等风险。
 - 修改10/新增15/删除0，共25文件；工作区未暂存，未修改冻结文档、Schema、seed、Policy、状态机、W6算法或AI。两份W1-D3交接文件未动，本轮无其他无关未跟踪文件；产物忽略核查通过。git diff --check及cached --check退出0，15项新增逐项独立空白检查无诊断，全部25项UTF-8严格解码/末尾换行通过；原34项CTest注册名核对无遗漏。完整范围见 `docs/W7-D1-acceptance-report.md`；无git add/commit/push/merge。
 - **CampusFix W7-D1 接单/拒单及维修员任务工作台实现与自动化验证已完成，等待独立源码审查；未进入W7-D2。**真实浏览器人工验收仍待补。
+
+## 2026-11-01 W7-D2：转派申请、审批、到场/进度及最小授权查询
+
+- 起始feature/w7-workflow，实际git fetch后HEAD与origin/feature/w7-workflow同为 `023c24646f13af655cb4d3907a59d7cd7900218a`；W7-D1已提交，工作区/暂存区干净，无reset/stash/覆盖。先发现既有时间线不能可靠发现真实待审申请、DISPATCH-only sysadmin不能借机读取完整详情的缺口，暂停后由用户正式批准D-021/API-34。
+- decisions新增已接受D-021，最小同步SRS第49接口索引、API-34完整查询/白名单/错误契约、FR-008及UI/API映射；保留既有决策与冻结历史。未改Schema、seed、原权限Policy/状态机、W7-D1后端、W6算法/权重、AI或依赖版本；无新增库。
+- 先实现并独立实测API-34：mine只按服务端requested_by读取worker本人历史申请及公开审批结果；managed按AREA_SCOPE或sysadmin DISPATCH自身范围，仅真实PENDING/当前有效派单/合法状态，独立于BUSINESS_READ与INTERNAL_NOTE_READ。专用query_only连接，同一只读快照认证/计数/分页，参数绑定、重叠区域去重、稳定排序，order_version取当前工单，不取申请快照；跨区筛选与不存在统一空结果，不暴露联系方式/内部字段。初轮80个SQLite断言及3场景32HTTP/56指纹通过后才继续写接口；最终增补为89断言及3场景34HTTP/60指纹。
+- API-21申请、API-22批准/拒绝、API-33到场/进度均单连接BEGIN IMMEDIATE重查身份、归属、范围、状态/版本，复用授权、状态机、事务和追加日志。申请/拒绝审批/到场/进度不改工单版本；批准结束原派单TRANSFERRED、派单version+1、工单回PENDING_DISPATCH并version+1，同事务写审批和日志，不自动创建新派单。保留旧assignment/dispatch_records；唯一PENDING申请及每派单唯一到场由原索引保护；int64溢出、旧申请/终态/失效/跨单均拒绝。
+- 新增workflow_service **10场景114断言**、workflow_concurrency **8场景24断言**、transfer_query_service **89断言**；真实索引、各SQL阶段失败、事务内撤销授权均回滚16表；WAL临时库另一个连接在COUNT/items之间真实提交，本次只读快照仍一致、下次才可见。SQL故障与外部写入均明确测试注入，不声称覆盖断电等物理故障。
+- 独立transfer_query_http **3场景、34请求、60次16表指纹**；workflow_http **10场景、156请求、156次16表指纹**（包含查询覆盖，不与前项/重跑累计）。真实Vite→Drogon API-18起步三链路：接单→到场/多进度只增加日志（其他15表指纹不变）；申请→API-34真实选项→拒绝，状态/版本/负载不变；申请后接单使当前版本4→5→API-34返回5→批准回待派版本6，原派单TRANSFERRED、真实累计负载5→4、快照保留，原负责人失去进度权，管理员可重新GET推荐但不自动派单。
+- 两管理员approve/approve、approve/reject、reject/reject以及申请、到场、审批/拒单、审批/接单、审批/进度共8组独立连接竞争；由第三连接锁定并确认两个BEGIN尝试后释放。每申请仅一个最终审批结果；进度先追加再批准可合法串行双成功，批准先结束时原负责人403，不强行把所有并发都当版本冲突。HTTP忙锁503不留下数据；客户端丢弃真实已提交POST回执仍未知，仅GET核实不重放。负例中的跨区、历史、终态由虚构数据库夹具构造，不冒充W7-D3完工接口。
+- Vue新增任务内转派/到场/进度及公开时间线、独立本人历史申请区、管理员真实审批队列。DISPATCH-only不会调用详情/内部时间线；必须选择API-34实际申请和当前版本再二次确认。422留草稿、409清旧操作、401/403/404清子组件及父页面数据、超时/5xx保持未知；身份/上下文generation与读序号分离，操作ticket避免旧POST释放新锁。到场当前页成功后禁用，重进页面不从旧公开日志臆测当前派单资格，服务端唯一索引仍保证不重复。
+- MSVC Debug完整构建退出0，最终无新增编译/链接警告；CMake复用原依赖缓存。最终全量CTest **42/42、失败0、退出0、253.35秒**，原37项全部保留并执行；此前268.01秒通过的一轮不累计。原认证/权限/Schema/seed/工单/派单/本地替身AI等回归通过，不是本轮真实DeepSeek测试。
+- 原前端182项保留，新增 **35/35**，全量 **217/217、退出0**；包含实际SFC setup/watch/模板编译和模拟生命周期，不冒充浏览器。npm.cmd run build退出0，JS806.82kB/gzip259.64kB，保留>500kB chunk非阻塞警告。独立正式后端（无数据库路径）+Vite随机端口执行既有W2 smoke.ps1退出0，直连/代理JSON与首页通过，健康检查仍独立于SQLite；自有进程/端口及临时库/凭据已清理，无用户数据库操作。
+- 首次失败历史：新增C++测试缺头文件C3861、不同类型同auto声明C3538均最小修复；旧SFC测试夹具需补新增组件注入，原断言不删；新测试发现只读核实更改读取序号导致未知结果共享锁未设置，分离contextGeneration后原失败用例及全量通过。
+- **真实浏览器/桌面/390px/Console仍未验证**：按computer-use技能检查，native pipe不存在、browser host unavailable、清单空；没有点击、截图或用户人工结果。报告给出人工补验步骤。保留SQLite单写者/5秒超时未知结果、无跨刷新幂等回执、内存Token、离线撤销不确定、限流与大chunk、跨机器/压测/物理故障未验证等风险。
+- 完整范围修改15/新增25/删除0，共40文件，全部未暂存，无无关未跟踪项。两份W1-D3交接文件未改；构建/缓存/数据库/WAL/证据文件仍被忽略，无跟踪产物。完整清单、命令、HTTP与SQLite证据及最终Git空白/编码核查见 `docs/W7-D2-acceptance-report.md`。不git add/commit/push/merge。
+- **CampusFix W7-D2 转派申请、管理员审批及维修进度事件实现与自动化验证已完成，等待独立源码审查；未进入W7-D3。**浏览器人工验收仍待补。

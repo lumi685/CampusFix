@@ -1,6 +1,7 @@
 # CampusFix REST API 契约
 
 > **版本**：V1.0（W1-D5 P0 冻结基线）
+> **受控补充**：2026-11-01 D-021 增加API-34；原33接口及字段权限保持不变，W1-D5冻结历史保留。
 >
 > **范围**：13 项 P0 的 HTTP 契约；本文是设计，不表示接口或测试已经实现。
 > **依据**：`docs/SRS.md` 第 45～56 章、`docs/requirements-trace.md`、`docs/flows.md`、`docs/roles.md`、`docs/database-design.md`。
@@ -124,6 +125,7 @@
 | API-31 | `GET /api/dashboard/summary` | FR-012 | 授权管理人员 | 无 |
 | API-32 | `GET /api/statistics/work-orders` | FR-012 | 授权管理人员 | 无 |
 | API-33 | `POST /api/work-orders/{id}/progress-events` | FR-004、FR-009 | 当前负责人 | E-01/E-02，状态不变 |
+| API-34 | `GET /api/transfer-requests` | FR-008、FR-002 | 本人worker / DISPATCH范围管理人员 | D-021，专用只读查询 |
 
 位置和分类只读端点是创建工单的必要基础数据，不提供 P0 管理 CRUD。系统账号/授权后台属于 P1；P0 的显式授权由受控初始化数据建立。
 
@@ -400,6 +402,18 @@
 - **成功 201**：`{"code":0,"message":"success","data":{"id":950,"order_id":101,"assignment_id":501,"type":"ARRIVED","order_status":"IN_PROGRESS","order_version":6,"created_at":"2026-10-19T10:20:00.000Z"},"request_id":"req_33"}`。
 - **失败示例 409**：`{"code":"DUPLICATE_OPERATION","message":"当前派单已记录到场","data":null,"request_id":"req_33"}`；非负责人返回隐藏资源的 404，非 `IN_PROGRESS` 返回 `ORDER_STATUS_CONFLICT`。
 - **状态/DB**：E-01/E-02 均不改变工单状态或版本。在短事务中重查工单、版本和当前有效派单后，向 `status_logs` 插入关联 `assignment_id` 的 `WORKER_ARRIVED` 或 `WORKER_PROGRESS_NOTE`；部分唯一索引保证每个派单最多一次到场。失败不产生事件。
+
+### API-34 转派申请最小授权查询（D-021，W7-D2受控补充）
+
+- **请求**：`GET /api/transfer-requests`，必须有效Session；view必填mine或managed；page默认1，page_size默认20且1～100；order_id可选正整数；均为int64范围，分页偏移不得溢出，拒绝未知参数。
+- **授权**：mine仅worker，按requested_by=认证用户过滤，包含本人历史申请和公开审批结果。managed仅dispatcher（AREA_SCOPE）或sysadmin（DISPATCH自身范围）；不要求也不授予BUSINESS_READ/INTERNAL_NOTE_READ。无有效能力403，过期/撤销Session或停用用户401。跨区域order_id与不存在筛选均为空items/total=0，不通过错误差异泄露存在性。
+- **managed数据条件**：transfer_requests.status=PENDING、申请关联工单当前有效派单、工单处于PENDING_ACCEPT/IN_PROGRESS；不返回已结束/非待审申请。重叠授权不重复计数。
+- **成功200完整DTO**：`{"code":0,"message":"success","data":{"items":[{"transfer_request_id":701,"order_id":101,"order_no":"WX202611010001","assignment_id":501,"reason":"需要专业人员","status":"PENDING","created_at":"2026-11-01T01:00:00.000Z","order_status":"IN_PROGRESS","order_version":5,"review_reason":null,"resolved_at":null}],"page":1,"page_size":20,"total":1},"request_id":"req_example"}`。示例仅说明形状；所有ID/版本取真实SQLite整数，order_version为当前工单版本（申请后接单也应更新），不是申请快照。order_no、review_reason、resolved_at允许NULL；其他字段必填。resolved状态为APPROVED/REJECTED/SUPERSEDED，mine可见公开结果。
+- **白名单**：仅上述item字段；不返回申请人无关资料、联系人/电话、内部备注、原始metadata、密码/Token/路径。不扩大API-10/11返回字段。
+- **失败示例422**：`{"code":"VALIDATION_ERROR","message":"Invalid transfer query","data":{"field":"page_size"},"request_id":"req_example"}`；401 AUTH_REQUIRED/AUTH_INVALID/AUTH_EXPIRED；403 ACTION_FORBIDDEN；忙锁503 DATABASE_BUSY；内部500不暴露SQL。成功/失败均统一JSON/request_id并no-store。
+- **失败示例401/403**：`{"code":"AUTH_REQUIRED","message":"Authentication failed","data":null,"request_id":"req_example"}`；`{"code":"ACTION_FORBIDDEN","message":"View unavailable","data":null,"request_id":"req_example"}`。示例request_id是文档占位，实际每次由服务器生成；空队列与跨区域/不存在order_id筛选统一成功200：data为`{"items":[],"page":1,"page_size":20,"total":0}`，不附存在性提示。
+- **DB/事务**：专用连接PRAGMA query_only=ON，同一只读快照完成重新认证、授权、total/items；参数化SQL，相同过滤条件，稳定created_at DESC,id DESC；GET不写任何业务表。API-22必须重新在写事务核验，查询可审批不代表写入保证。
+- **测试**：TC-WF-08/09、TC-SEC-01～05，新增W7-D2查询/真实HTTP场景覆盖四角色、独立能力范围、撤销/停用、重叠授权、历史/失效、当前版本、参数/分页及GET前后16表快照一致。
 
 ## 12. 状态—端点—事务核对
 

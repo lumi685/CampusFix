@@ -6,6 +6,8 @@
 #include "controllers/WorkerController.h"
 #include "controllers/DispatchController.h"
 #include "controllers/WorkerTaskController.h"
+#include "controllers/TransferController.h"
+#include "controllers/WorkflowController.h"
 #include "controllers/AiReportAssistantController.h"
 #include "infrastructure/DatabaseMigration.h"
 #include "infrastructure/DemoSeed.h"
@@ -127,6 +129,10 @@ int main(int argc, char *argv[])
         campusfix::registerWorkerController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         campusfix::registerWorkerTaskController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
+        campusfix::registerTransferController(allocatedDb && *allocatedDb ?
+            std::filesystem::path(allocatedDb) : std::filesystem::path{});
+        campusfix::registerWorkflowController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});
         campusfix::registerDispatchController(allocatedDb && *allocatedDb ?
             std::filesystem::path(allocatedDb) : std::filesystem::path{});

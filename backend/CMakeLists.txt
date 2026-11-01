@@ -70,6 +70,10 @@ add_library(campusfix_database STATIC
     src/services/AssignmentService.cpp
     src/repositories/WorkerTaskRepository.cpp
     src/services/WorkerTaskService.cpp
+    src/repositories/TransferRepository.cpp
+    src/services/TransferQueryService.cpp
+    src/services/TransferService.cpp
+    src/services/ProgressEventService.cpp
 )
 target_include_directories(campusfix_database PUBLIC src)
 target_link_libraries(campusfix_database PUBLIC unofficial::sqlite3::sqlite3 unofficial-sodium::sodium campusfix_dispatch)
@@ -88,6 +92,8 @@ add_library(campusfix_http STATIC
     src/controllers/WorkerController.cpp
     src/controllers/DispatchController.cpp
     src/controllers/WorkerTaskController.cpp
+    src/controllers/TransferController.cpp
+    src/controllers/WorkflowController.cpp
 )
 target_link_libraries(campusfix_http PUBLIC Drogon::Drogon campusfix_database campusfix_ai)
 add_executable(campusfix_backend src/main.cpp)
@@ -105,6 +111,22 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(campusfix_workflow_test tests/integration/WorkflowServiceTest.cpp)
+    target_link_libraries(campusfix_workflow_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_workflow_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_workflow_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME workflow_service COMMAND campusfix_workflow_test)
+    add_test(NAME workflow_concurrency COMMAND campusfix_workflow_test --races)
+    set_tests_properties(workflow_service workflow_concurrency PROPERTIES TIMEOUT 90)
+    add_executable(campusfix_transfer_query_test tests/integration/TransferQueryTest.cpp)
+    target_link_libraries(campusfix_transfer_query_test PRIVATE campusfix_database)
+    target_compile_definitions(campusfix_transfer_query_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
+    if(MSVC)
+        target_compile_options(campusfix_transfer_query_test PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME transfer_query_service COMMAND campusfix_transfer_query_test)
     add_executable(campusfix_worker_task_test tests/integration/WorkerTaskServiceTest.cpp)
     target_link_libraries(campusfix_worker_task_test PRIVATE campusfix_database)
     target_compile_definitions(campusfix_worker_task_test PRIVATE CAMPUSFIX_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations" CAMPUSFIX_SEED_FILE="${CMAKE_CURRENT_SOURCE_DIR}/seeds/001_demo_data.sql")
@@ -166,6 +188,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai_chat_validation_limits COMMAND campusfix_ai_test)
     find_program(CAMPUSFIX_NODE NAMES node.exe node REQUIRED)
+    add_executable(campusfix_workflow_http_fixture tests/integration/WorkflowHttpFixture.cpp)
+    target_link_libraries(campusfix_workflow_http_fixture PRIVATE campusfix_http)
+    if(MSVC)
+        target_compile_options(campusfix_workflow_http_fixture PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME transfer_query_http COMMAND "${CAMPUSFIX_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../frontend/tests/run-workflow-http.mjs" --query-only)
+    set_tests_properties(transfer_query_http PROPERTIES TIMEOUT 90)
+    add_test(NAME workflow_http COMMAND "${CAMPUSFIX_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../frontend/tests/run-workflow-http.mjs")
+    set_tests_properties(workflow_http PROPERTIES TIMEOUT 240)
     add_executable(campusfix_worker_task_http_fixture tests/integration/WorkerTaskHttpFixture.cpp)
     target_link_libraries(campusfix_worker_task_http_fixture PRIVATE campusfix_http)
     if(MSVC)
