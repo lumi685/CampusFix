@@ -11,7 +11,11 @@ export function transferPage(data, managed = false) {
   if (new Set(items.map(t => t.transfer_request_id)).size !== items.length) invalid()
   return { items, page: data.page, page_size: data.page_size, total: data.total }
 }
-function receipt(d, c) {
+function receipt(d, c, note) {
+  if (c.kind === 'complete') {
+    if (d?.order_id !== c.orderId || d.status !== 'PENDING_VERIFY' || d.version !== c.version + 1 || d.repair_summary !== note) invalid()
+    return { order_id:d.order_id,status:d.status,version:d.version,repair_summary:d.repair_summary }
+  }
   if (c.kind === 'transfer') {
     if (!integer(d?.transfer_request_id) || d.order_id !== c.orderId || d.status !== 'PENDING' || d.order_status !== c.status) invalid()
     return { transfer_request_id: d.transfer_request_id, order_id: d.order_id, status: d.status, order_status: d.order_status }
@@ -33,7 +37,7 @@ export function workflowFlow(api, authorized = () => false) {
     clear() { generation++;this.phase='idle';this.context=null;this.note='';this.message='';this.result=null;this.verification=null;this.verifying=false },
     open(context) {
       if (['submitting','unknown_result'].includes(this.phase) || !authorized()) return false
-      if (!integer(context.orderId) || !integer(context.version) || !['PENDING_ACCEPT','IN_PROGRESS'].includes(context.status) || !['transfer','decision','ARRIVED','PROGRESS_NOTE'].includes(context.kind) || (['ARRIVED','PROGRESS_NOTE'].includes(context.kind) && context.status !== 'IN_PROGRESS') || (context.kind === 'decision' && (!integer(context.requestId) || !['APPROVE','REJECT'].includes(context.decision)))) invalid()
+      if (!integer(context.orderId) || !integer(context.version) || !['PENDING_ACCEPT','IN_PROGRESS'].includes(context.status) || !['transfer','decision','ARRIVED','PROGRESS_NOTE','complete'].includes(context.kind) || (['ARRIVED','PROGRESS_NOTE','complete'].includes(context.kind) && context.status !== 'IN_PROGRESS') || (context.kind === 'decision' && (!integer(context.requestId) || !['APPROVE','REJECT'].includes(context.decision)))) invalid()
       this.clear();this.context={...context};this.phase='ready';return true
     },
     cancel() { if (this.phase === 'ready') this.clear() },
@@ -47,13 +51,13 @@ export function workflowFlow(api, authorized = () => false) {
     async send() {
       if (this.phase === 'submitting') return null
       if (this.phase !== 'ready' || !this.context || !authorized()) throw new Error('请重新读取后人工确认，未知操作不得重发。')
-      const c={...this.context};workflowText(this.note,c.kind==='PROGRESS_NOTE'?1000:500,c.kind==='ARRIVED')
+      const c={...this.context};workflowText(this.note,c.kind==='complete'?2000:c.kind==='PROGRESS_NOTE'?1000:500,c.kind==='ARRIVED')
       const current=generation,note=this.note;this.phase='submitting';this.message=''
-      try { const d=receipt(await api.post(c,note),c);if(current!==generation||!authorized())return null;this.result=d;this.note='';this.phase='success';this.message='服务器已确认操作成功。';return d }
+      try { const d=receipt(await api.post(c,note),c,note);if(current!==generation||!authorized())return null;this.result=d;this.note='';this.phase='success';this.message='服务器已确认操作成功。';return d }
       catch(e) {
         if(current!==generation)return null
         this.result=null
-        if(e.status===422){this.phase='ready';this.message='字段校验失败，已保留备注草稿，请修正后再次人工确认。'}
+        if(e.status===422){this.phase='ready';this.message=c.kind==='complete'?'repair_summary 维修结果校验失败，已保留草稿，请修正后再次人工确认。':'字段校验失败，已保留备注草稿，请修正后再次人工确认。'}
         else if([401,403,404].includes(e.status)){this.clear();this.phase='forbidden';this.message='身份、权限或资源已变化，旧数据已清除。'}
         else if(!e.status||e.status>=500){this.note='';this.phase='unknown_result';this.message='操作结果未确认，可能已提交；只读状态不能证明本次请求成功，禁止重发。';await this.verify()}
         else {this.context=null;this.note='';this.phase=e.status===409?'conflict':'error';this.message=e.status===409?'状态、版本或申请已变化（也可能重复到场）。旧操作已清除，请重新读取。':'操作未被接受，请重新读取。'}

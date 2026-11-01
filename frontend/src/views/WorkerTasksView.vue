@@ -14,6 +14,7 @@ const flow = reactive(workerTaskFlow({ list: workerTasks, action: taskAction, de
 const busy = computed(() => ['loading', 'submitting', 'unknown_result'].includes(flow.phase) || workflowGate.busy || workflowGate.unknown)
 const urgency = { LOW: '低', NORMAL: '普通', HIGH: '高', URGENT: '紧急' }
 async function confirm() {
+  if (workflowGate.busy || workflowGate.unknown) return
   try { if (flow.selected?.kind === 'refuse') refusalReason(flow.reason); await flow.send() }
   catch (e) { flow.message = e.message }
 }
@@ -26,15 +27,15 @@ onBeforeUnmount(() => flow.clear())
     <el-alert v-if="!allowed" title="当前身份无维修任务权限，旧数据已清除。" type="warning" :closable="false" />
     <template v-else>
       <WorkerTransferHistory @forbidden="flow.clear()"/>
-      <div class="toolbar"><el-button :disabled="busy" @click="flow.load(1, 'PENDING_ACCEPT')">待接任务</el-button><el-button :disabled="busy" @click="flow.load(1, 'IN_PROGRESS')">进行中</el-button><el-button :disabled="busy" @click="flow.load(flow.page)">刷新任务</el-button></div>
+      <div class="toolbar"><el-button :disabled="busy" @click="flow.load(1, 'PENDING_ACCEPT')">待接任务</el-button><el-button :disabled="busy" @click="flow.load(1, 'IN_PROGRESS')">进行中</el-button><el-button :disabled="busy" @click="flow.load(1, 'PENDING_VERIFY')">待验收（只读）</el-button><el-button :disabled="busy" @click="flow.load(flow.page)">刷新任务</el-button></div>
       <p v-if="flow.phase === 'loading'" role="status">正在读取真实任务…</p>
       <el-alert v-if="flow.message" :title="flow.message" type="info" :closable="false" />
-      <p v-if="flow.phase === 'empty'">当前页暂无{{ flow.status === 'PENDING_ACCEPT' ? '待接' : '进行中' }}任务。</p>
+      <p v-if="flow.phase === 'empty'">当前页暂无{{ flow.status === 'PENDING_ACCEPT' ? '待接' : flow.status === 'PENDING_VERIFY' ? '待验收' : '进行中' }}任务。</p>
       <article v-for="task in flow.items" :key="task.id" class="task-card">
         <h2>{{ task.order_no }} · {{ task.title }}</h2><p>{{ task.category }} · {{ task.location }}</p><p>审核紧急度：{{ urgency[task.urgency] }} · 版本 {{ task.version }} · <OrderStatusTag :status="task.status" /></p>
         <template v-if="task.status === 'PENDING_ACCEPT'"><el-button type="primary" :disabled="flow.phase !== 'ready' || workflowGate.busy || workflowGate.unknown" @click="flow.choose(task.id, 'accept')">接单</el-button><el-button type="danger" :disabled="flow.phase !== 'ready' || workflowGate.busy || workflowGate.unknown" @click="flow.choose(task.id, 'refuse')">拒单</el-button></template>
-        <p v-else>服务器已确认正在维修。完工、验收和评价不在本阶段开放。</p>
-        <WorkerWorkflowPanel :task="task" :gate="workflowGate" :blocked="['loading','submitting','unknown_result'].includes(flow.phase)" @forbidden="flow.clear()"/>
+        <p v-else-if="task.status === 'IN_PROGRESS'">服务器已确认正在维修，可提交维修结果。验收和评价尚未开放。</p>
+        <WorkerWorkflowPanel :task="task" :gate="workflowGate" :blocked="['loading','submitting','unknown_result'].includes(flow.phase)" @changed="flow.load(1, 'PENDING_VERIFY')" @stale="flow.clear(); flow.message='工单状态或版本已变化，旧任务已清除，请只读刷新。'" @forbidden="flow.clear()"/>
       </article>
       <el-pagination v-if="flow.total" :current-page="flow.page" :total="flow.total" :page-size="20" :disabled="busy" layout="prev, pager, next" @current-change="flow.load($event)" />
       <section v-if="flow.phase === 'unknown_result'" aria-live="polite"><el-button :loading="flow.verifying" :disabled="flow.verifying" @click="flow.verify()">只读核实最新状态</el-button><p v-if="flow.verification">工单 #{{ flow.verification.id }} · 版本 {{ flow.verification.version }} · <OrderStatusTag :status="flow.verification.status" /></p><p>未知写入不会重试。请核实后联系管理员；离开页面再返回会重新读取服务器任务。</p></section>

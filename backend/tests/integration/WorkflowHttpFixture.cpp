@@ -5,6 +5,7 @@
 #include "controllers/WorkerTaskController.h"
 #include "controllers/DispatchController.h"
 #include "controllers/WorkOrderQueryController.h"
+#include "controllers/WorkOrderController.h"
 #include "controllers/HealthController.h"
 #include <drogon/drogon.h>
 #include <fstream>
@@ -35,7 +36,8 @@ int main(int argc,char **argv){try{initializeCrypto();
     if(argc==4&&std::string(argv[1])=="--inspect"){
         SqliteConnection db(argv[2]);const auto id=std::stoll(argv[3]);auto j=test::inspectDispatch(db,id);j["transfers"]=Json::arrayValue;
         auto q=db.prepare("SELECT id,assignment_id,status,reviewed_by,review_reason,resolved_at,order_version,created_at FROM transfer_requests WHERE order_id=?1 ORDER BY id");q.bindInt(1,id);
-        while(q.step()){Json::Value t;t["id"]=Json::Int64(q.columnInt(0));t["assignment_id"]=Json::Int64(q.columnInt(1));t["status"]=q.columnText(2);t["reviewed_by"]=q.columnIsNull(3)?Json::Value():Json::Value(Json::Int64(q.columnInt(3)));t["review_reason"]=q.columnIsNull(4)?Json::Value():Json::Value(q.columnText(4));t["resolved_at"]=q.columnIsNull(5)?Json::Value():Json::Value(q.columnText(5));t["order_version"]=Json::Int64(q.columnInt(6));t["created_at"]=q.columnText(7);j["transfers"].append(t);}std::cout<<j;return 0;
+        while(q.step()){Json::Value t;t["id"]=Json::Int64(q.columnInt(0));t["assignment_id"]=Json::Int64(q.columnInt(1));t["status"]=q.columnText(2);t["reviewed_by"]=q.columnIsNull(3)?Json::Value():Json::Value(Json::Int64(q.columnInt(3)));t["review_reason"]=q.columnIsNull(4)?Json::Value():Json::Value(q.columnText(4));t["resolved_at"]=q.columnIsNull(5)?Json::Value():Json::Value(q.columnText(5));t["order_version"]=Json::Int64(q.columnInt(6));t["created_at"]=q.columnText(7);j["transfers"].append(t);}
+        auto result=db.prepare("SELECT repair_summary,rework_count,updated_at,completed_at FROM work_orders WHERE id=?1");result.bindInt(1,id);result.step();j["repair_summary"]=result.columnIsNull(0)?Json::Value():Json::Value(result.columnText(0));j["rework_count"]=Json::Int64(result.columnInt(1));j["updated_at"]=result.columnText(2);j["completed_at"]=result.columnIsNull(3)?Json::Value():Json::Value(result.columnText(3));std::cout<<j;return 0;
     }
     if(argc==5&&std::string(argv[1])=="--mode") {
         SqliteConnection db(argv[2]);SqliteTransaction tx(db);const std::string mode=argv[3];const auto id=std::stoll(argv[4]);
@@ -44,7 +46,8 @@ int main(int argc,char **argv){try{initializeCrypto();
         else if(mode=="rejected") {auto q=db.prepare("UPDATE transfer_requests SET status='REJECTED',review_reason='Fictional public decision',resolved_at='2026-11-01T00:00:00.000Z' WHERE order_id=?1");q.bindInt(1,id);q.step();}
         else if(mode=="ended") {auto q=db.prepare("UPDATE assignments SET ended_at='2026-11-01T00:00:00.000Z',end_reason='TRANSFERRED' WHERE order_id=?1 AND ended_at IS NULL");q.bindInt(1,id);q.step();}
         else if(mode=="pending-verify") {auto q=db.prepare("UPDATE work_orders SET status='PENDING_VERIFY' WHERE id=?1");q.bindInt(1,id);q.step();}
-        else if(mode=="completed") {auto q=db.prepare("UPDATE work_orders SET status='COMPLETED' WHERE id=?1");q.bindInt(1,id);q.step();}
+        else if(mode=="completed"||mode=="closed"||mode=="cancelled") {auto q=db.prepare("UPDATE work_orders SET status=?1 WHERE id=?2");q.bindText(1,mode=="completed"?"COMPLETED":mode=="closed"?"CLOSED":"CANCELLED");q.bindInt(2,id);q.step();}
+        else if(mode=="rework-fixture") {auto q=db.prepare("UPDATE work_orders SET status='IN_PROGRESS',version=version+1,rework_count=rework_count+1 WHERE id=?1 AND status='PENDING_VERIFY'");q.bindInt(1,id);q.step();}
         else if(mode=="old-assignment") {
             auto q=db.prepare("UPDATE assignments SET ended_at='2026-11-01T00:00:00.000Z',end_reason='TRANSFERRED' WHERE order_id=?1 AND ended_at IS NULL");q.bindInt(1,id);q.step();
             auto insert=db.prepare("INSERT INTO assignments(order_id,worker_id,assigned_by) SELECT ?1,2,id FROM users WHERE username='demo_dispatcher'");insert.bindInt(1,id);insert.step();
@@ -64,7 +67,7 @@ int main(int argc,char **argv){try{initializeCrypto();
     }
     if(argc==5&&std::string(argv[1])=="--serve") {
         tracePath=argv[4];if(sqlite3_auto_extension(reinterpret_cast<void(*)()>(attach))!=SQLITE_OK)throw std::runtime_error("Trace extension");
-        registerHealthController();registerTransferController(argv[2]);registerWorkflowController(argv[2]);registerDispatchController(argv[2]);registerWorkerTaskController(argv[2]);registerWorkOrderQueryController(argv[2]);
+        registerHealthController();registerTransferController(argv[2]);registerWorkflowController(argv[2]);registerDispatchController(argv[2]);registerWorkerTaskController(argv[2]);registerWorkOrderController(argv[2]);
         drogon::app().setThreadNum(4).addListener("127.0.0.1",static_cast<std::uint16_t>(std::stoi(argv[3]))).run();return 0;
     }
     return 2;

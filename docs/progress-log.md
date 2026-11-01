@@ -668,3 +668,19 @@
 - **真实浏览器/桌面/390px/Console仍未验证**：按computer-use技能检查，native pipe不存在、browser host unavailable、清单空；没有点击、截图或用户人工结果。报告给出人工补验步骤。保留SQLite单写者/5秒超时未知结果、无跨刷新幂等回执、内存Token、离线撤销不确定、限流与大chunk、跨机器/压测/物理故障未验证等风险。
 - 完整范围修改15/新增25/删除0，共40文件，全部未暂存，无无关未跟踪项。两份W1-D3交接文件未改；构建/缓存/数据库/WAL/证据文件仍被忽略，无跟踪产物。完整清单、命令、HTTP与SQLite证据及最终Git空白/编码核查见 `docs/W7-D2-acceptance-report.md`。不git add/commit/push/merge。
 - **CampusFix W7-D2 转派申请、管理员审批及维修进度事件实现与自动化验证已完成，等待独立源码审查；未进入W7-D3。**浏览器人工验收仍待补。
+
+### W7-D3 — 维修结果提交与待验收流转（2026-11-01）
+
+- 起始分支feature/w7-workflow、HEAD `f78c992c35e7d79e576ea64ff7f66caef1b2b7df`；fetch成功，与远端一致，工作区/暂存区干净。依据FR-009、API-23、T-19以及既有冻结决策实施，不改Schema/seed、冻结文档、权限/调度/AI语义，不实现API-24/25/27/28。
+- 新增CompletionService/Repository，扩展既有WorkflowController及前端工作台。BEGIN IMMEDIATE内重认证、Action::Complete和当前有效已接单归属、状态/版本校验；保存完整结果、PENDING_VERIFY和工单version+1、派单result_submitted_at/version+1；同事务将该派单PENDING转派申请SUPERSEDED、公开系统原因/resolved_at、reviewed_by=NULL；追加真实actor/assignment/request_id/UTC及完整public_note的ORDER_COMPLETED，提交前复核权限与保存不变量。所有SQL参数绑定、条件更新/行数检查，int64溢出/无效时间拒绝。有效派单不结束、实时负载不释放、原派单/调度历史保留，rework_count和completed_at不改。
+- 后端新增completion_service **7场景95断言**、completion_concurrency **5场景20断言**、completion_http；全量原42项均保留，最终CTest **45/45、失败0、退出0、279.45秒**。完整MSVC Debug构建退出0，无新增编译/链接警告；CMake复用既有Drogon1.9.13#2/SQLite3.53.4#2/libsodium1.0.22#1缓存，不升级/下载依赖。
+- 真实Vite→Drogon→临时SQLite：**8场景、136HTTP、175次独立16表全内容指纹**，不与重跑累计。正常链路通过真实创建→提交→审核→派单→接单→到场/进度→complete；样本工单5版本5→6、PENDING_VERIFY，派单1仍有效、实际负载1→1；原报修人timeline读完整结果，其他报修人和无业务读取授权sysadmin为404；API-10结构不扩展。另工单6申请1在结果提交事务内SUPERSEDED、resolved_at等于最终提交时间，旧审批409、mine历史可见、managed移除。
+- 两真实BEGIN先被第三连接锁阻塞再释放，覆盖complete/complete、批准转派、进度、申请（另Service覆盖拒绝审批）；仅一个完成日志，审批先结束派单时旧负责人403，进度/申请在完成前可合法串行成功，不伪称所有竞争必为409。完整回归后又实跑5场景20断言，包含第二个complete胜出，退出0。
+- 四写入阶段HTTP SQL ABORT失败全部回滚16表；Service同时覆盖RAISE(IGNORE)零行修改/日志插入与事务末尾账号停用，禁止部分提交。真实SQLITE_BUSY503指纹不变。客户端丢弃真实已提交回执仍unknown_result，仅GET核实、不自动重放。临时库integrity_check=ok、foreign_key_check为空，自有进程/随机端口及临时凭据/数据库清理，未操作用户库。
+- 合法重提兼容：保留旧ORDER_COMPLETED全文/时间/派单，更新最新摘要和result_submitted_at，complete不加返工次数。明确使用隔离SQL夹具模拟未来返工前置，不把它冒充API-24已实现或已做端到端验收。
+- Vue沿用共享workflowGate，新增结果确认框、Unicode实时计数与不立即释放负载提醒；成功严格核验200统一结构/request_id/工单/版本/全文后重新GET公开时间线和PENDING_VERIFY只读任务（current_only=true）。422保留草稿，409清旧选择/父任务，401/403/404清未授权数据，网络/5xx/异常200未知且仅GET核实；跨任务互斥、身份/卸载generation与ticket防迟到覆盖/释放新锁。无客户端假写状态、无未实现的验收/评价按钮。
+- 前端原217项保留，新增24，完整 **241/241、退出0**，含实际SFC生命周期/共享锁与编译后的OrderTimeline真实Vue SSR结果全文/HTML转义，不冒充浏览器。Node24.18.1、npm11.16.0，Vite生产构建退出0、JS809.13kB/gzip260.23kB；保留原>500kB chunk警告。通过实际Drogon/Vite运行既有W2 smoke.ps1退出0，直连/代理200JSON和首页通过。
+- 失败历史保留：首次沙箱MSBuild FileTracker MSB4018/E_ACCESSDENIED，授权本机同工具链构建解决；新增测试C2678字符串/Json比较修复，首次测试程序缺失曾Not Run，后重建执行通过；新并发测试错误假定第一个complete胜出，修正为校验任一胜出且唯一完成日志，未删除场景或放宽业务断言。
+- **真实浏览器桌面、390px、Console及页面交互未验证**。computer-use技能检查本机窗口枚举可用，但专用浏览器连接为空/host unavailable；未输入用户密码、未登录或截图，不虚构用户人工结论。完整人工补验步骤见 `docs/W7-D3-acceptance-report.md`。
+- 结项修改11/新增8/删除0，共19文件全部未暂存；git diff --check、暂存区空白检查及全文件严格UTF-8/末尾换行、新增文件空白检查通过。保护基线无变化，构建/依赖/SQLite/WAL/证据均忽略，无无关未跟踪项；8848/5173无监听。保留内存Token、未知回执、离线撤销、限流/跨机器/物理故障/大chunk等既有风险。完整清单与真实HTTP/SQLite证据见验收报告。
+- **CampusFix W7-D3 维修结果提交与待验收流转实现与自动化验证已完成，等待独立源码审查；未进入W7-D4。**未git add/commit/push/merge，等待人工及独立源码审查。

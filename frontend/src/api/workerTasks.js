@@ -2,7 +2,7 @@ import { apiClient } from './client.js'
 import { orderId } from './orders.js'
 
 export async function workerTasks({ page = 1, status = 'PENDING_ACCEPT' } = {}) {
-  if (!Number.isSafeInteger(page) || page < 1 || !['PENDING_ACCEPT', 'IN_PROGRESS'].includes(status)) throw new Error('任务查询参数无效。')
+  if (!Number.isSafeInteger(page) || page < 1 || !['PENDING_ACCEPT', 'IN_PROGRESS', 'PENDING_VERIFY'].includes(status)) throw new Error('任务查询参数无效。')
   return (await apiClient.get('/work-orders', { authRequired: true, params: { view: 'assigned', current_only: true, status, page, page_size: 20 } })).data.data
 }
 export function refusalReason(reason) {

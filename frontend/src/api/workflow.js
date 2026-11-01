@@ -22,3 +22,9 @@ export async function progressEvent(id, expected, type, note = '') {
   workflowText(note, type === 'ARRIVED' ? 500 : 1000, type === 'ARRIVED')
   return (await apiClient.post(`/work-orders/${orderId(id)}/progress-events`, { expected_version: version(expected), type, ...(note ? { note } : {}) }, { authRequired: true })).data.data
 }
+export async function completeTask(id, expected, repair_summary) {
+  const response = await apiClient.post(`/work-orders/${orderId(id)}/complete`, { expected_version: version(expected), repair_summary: workflowText(repair_summary, 2000) }, { authRequired: true })
+  const body = response.data
+  if (response.status !== 200 || body?.code !== 0 || body.message !== 'success' || typeof body.request_id !== 'string' || !/^req_[\w-]{1,100}$/.test(body.request_id)) throw new Error('维修提交回执不完整，结果未知，请只读核实。')
+  return body.data
+}
