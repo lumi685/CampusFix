@@ -2,6 +2,7 @@
 
 > **版本**：V1.0（W1-D5 P0 冻结基线）
 > **受控补充**：2026-11-01 D-021 增加API-34；原33接口及字段权限保持不变，W1-D5冻结历史保留。
+> 2026-11-02 D-022 增加API-35 CLOSE-only最小授权队列；API-01～34与既有资源读取权限保持不变。
 >
 > **范围**：13 项 P0 的 HTTP 契约；本文是设计，不表示接口或测试已经实现。
 > **依据**：`docs/SRS.md` 第 45～56 章、`docs/requirements-trace.md`、`docs/flows.md`、`docs/roles.md`、`docs/database-design.md`。
@@ -119,6 +120,7 @@
 | API-25 | `POST /api/work-orders/{id}/evaluations` | FR-010 | 原报修人 | T-22，状态不变 |
 | API-26 | `GET /api/work-orders/{id}/evaluations` | FR-010 | 按工单范围 | 无 |
 | API-27 | `POST /api/work-orders/{id}/close` | FR-010 | 授权管理人员 | T-23 |
+| API-35 | `GET /api/work-orders/closable` | FR-010 | AREA_SCOPE / CLOSE | 无，D-022受控只读补充 |
 | API-28 | `POST /api/files/upload` | FR-011 | 有修改权限的报修人/当前维修员 | 无 |
 | API-29 | `GET /api/files/{id}` | FR-002、FR-011 | 按工单范围 | 无 |
 | API-30 | `DELETE /api/files/{id}` | FR-011 | 上传者且处于可编辑阶段 | 无 |
@@ -414,6 +416,19 @@
 - **失败示例401/403**：`{"code":"AUTH_REQUIRED","message":"Authentication failed","data":null,"request_id":"req_example"}`；`{"code":"ACTION_FORBIDDEN","message":"View unavailable","data":null,"request_id":"req_example"}`。示例request_id是文档占位，实际每次由服务器生成；空队列与跨区域/不存在order_id筛选统一成功200：data为`{"items":[],"page":1,"page_size":20,"total":0}`，不附存在性提示。
 - **DB/事务**：专用连接PRAGMA query_only=ON，同一只读快照完成重新认证、授权、total/items；参数化SQL，相同过滤条件，稳定created_at DESC,id DESC；GET不写任何业务表。API-22必须重新在写事务核验，查询可审批不代表写入保证。
 - **测试**：TC-WF-08/09、TC-SEC-01～05，新增W7-D2查询/真实HTTP场景覆盖四角色、独立能力范围、撤销/停用、重叠授权、历史/失效、当前版本、参数/分页及GET前后16表快照一致。
+
+### API-35 CLOSE-only 最小授权可关闭工单队列（D-022，W7-D5受控补充）
+
+- **请求**：`GET /api/work-orders/closable`；认证后只允许 dispatcher 的有效 AREA_SCOPE 或 sysadmin 的有效 CLOSE 范围。CLOSE-only 不需要 BUSINESS_READ；BUSINESS_READ/DISPATCH/REVIEW/INTERNAL_NOTE_READ 不替代 CLOSE。reporter/worker 为403，失效/撤销Session或停用用户401；无对应有效能力403。
+- **参数**：仅 `page`（默认1，正int64）、`page_size`（默认20，1～100），偏移不得溢出；未知参数、非法类型/范围422 VALIDATION_ERROR。不提供任意 order_id 或区域探测参数。
+- **筛选**：真实 `status=COMPLETED`，合法UTC `completed_at`，不存在 `ended_at IS NULL` 的派单；位置按每项能力自身授权的祖先/后代范围过滤，NULL范围全局，重叠不重复。空授权区域返回空结果，不泄露范围外存在性。
+- **排序/分页**：`updated_at DESC,id DESC`；total 与 items 同过滤及一致只读快照；超过末页空 items，保留真实 total。
+- **成功200**：`{"code":0,"message":"success","data":{"items":[{"id":101,"order_no":"WX202611020001","status":"COMPLETED","version":10,"updated_at":"2026-11-02T11:00:00.000Z"}],"page":1,"page_size":20,"total":1},"request_id":"req_example"}`。样例不表示真实数据；所有ID/version为SQLite整数。
+- **字段白名单**：每项只允许 `id/order_no/status/version/updated_at`；无标题、描述、联系人、电话、负责人、完整位置、维修结果、评价、内部备注、metadata、时间线或附件。
+- **失败示例403**：`{"code":"ACTION_FORBIDDEN","message":"View unavailable","data":null,"request_id":"req_example"}`；422沿用统一字段错误；500/503不泄露SQL或内部数据。
+- **DB/安全**：专用连接 `PRAGMA query_only=ON`，同一只读事务重新认证及授权后参数绑定查询；不写任何业务表。不改变 API-10/11/26 读取范围；静态路径与动态 `{id}` 必须真实HTTP验证。
+- **后续关闭**：API-27使用真实ID/version，BEGIN IMMEDIATE中重新校验所有前置与完成证据；队列结果不是持续授权凭据。重复/旧状态/旧版本409，前端不自动重放；关闭可不经评价。
+- **测试关联**：FR-010、TC-WF-16、WF-D3-14；专用队列权限/范围/分页/只读/静态路由/真实Vite→Drogon关闭集成测试。新增测试的实际执行结果记录于W7-D5报告，不预先宣称通过。
 
 ## 12. 状态—端点—事务核对
 

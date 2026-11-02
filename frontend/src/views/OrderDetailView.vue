@@ -7,6 +7,7 @@ import OrderStatusTag from '../components/OrderStatusTag.vue'
 import OrderTimeline from '../components/OrderTimeline.vue'
 import OrderEditForm from '../components/OrderEditForm.vue'
 import OrderVerifyPanel from '../components/OrderVerifyPanel.vue'
+import OrderEvaluationPanel from '../components/OrderEvaluationPanel.vue'
 import { authState } from '../stores/auth.js'
 import { ownsReportedOrder, latestReturn } from '../utils/orderSupplement.js'
 const route = useRoute(), detail = ref(null), items = ref([]), busy = ref(false), error = ref(''), timelineError = ref(''), page = ref(1), total = ref(0), timelineBusy = ref(false)
@@ -97,7 +98,8 @@ onBeforeUnmount(() => { sequence++; timelineSequence++; reasonSequence++ })
       <el-alert v-if="ownerError" :title="`尚未确认原报修人身份：${ownerError}`" type="warning" :closable="false" />
       <el-button v-if="owner && !editing" type="primary" @click="editing = true">补充信息 / 编辑</el-button>
       <OrderEditForm v-if="owner && editing" :key="detail.id" :detail="detail" @saved="saved" @complete="load" @refresh="load" />
-      <p v-else>仅原报修人的草稿或待补充工单可以编辑。取消、评价与图片功能尚未开放。</p>
+      <p v-else>仅原报修人的草稿或待补充工单可以编辑。取消与图片功能尚未开放。</p>
+      <OrderEvaluationPanel :key="`evaluation:${detail.id}:${detail.version}`" :detail="detail" @changed="load" @forbidden="forgetVerification('身份、权限或资源变化，旧工单已清除。')" @stale="forgetVerification('状态或版本变化，请重新获取工单。')"/>
       <OrderVerifyPanel v-if="detail.status==='PENDING_VERIFY'" :key="`${detail.id}:${detail.version}`" :detail="detail" @changed="load" @forbidden="forgetVerification('身份、权限或资源变化，旧工单已清除。')" @stale="forgetVerification('状态或版本变化，请重新获取工单。')"/>
       <h2>公开时间线</h2>
       <el-alert v-if="timelineError" :title="timelineError" type="error" :closable="false" />

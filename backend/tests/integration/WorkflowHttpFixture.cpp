@@ -38,7 +38,8 @@ int main(int argc,char **argv){try{initializeCrypto();
         SqliteConnection db(argv[2]);const auto id=std::stoll(argv[3]);auto j=test::inspectDispatch(db,id);j["transfers"]=Json::arrayValue;
         auto q=db.prepare("SELECT id,assignment_id,status,reviewed_by,review_reason,resolved_at,order_version,created_at FROM transfer_requests WHERE order_id=?1 ORDER BY id");q.bindInt(1,id);
         while(q.step()){Json::Value t;t["id"]=Json::Int64(q.columnInt(0));t["assignment_id"]=Json::Int64(q.columnInt(1));t["status"]=q.columnText(2);t["reviewed_by"]=q.columnIsNull(3)?Json::Value():Json::Value(Json::Int64(q.columnInt(3)));t["review_reason"]=q.columnIsNull(4)?Json::Value():Json::Value(q.columnText(4));t["resolved_at"]=q.columnIsNull(5)?Json::Value():Json::Value(q.columnText(5));t["order_version"]=Json::Int64(q.columnInt(6));t["created_at"]=q.columnText(7);j["transfers"].append(t);}
-        auto result=db.prepare("SELECT repair_summary,rework_count,updated_at,completed_at FROM work_orders WHERE id=?1");result.bindInt(1,id);result.step();j["repair_summary"]=result.columnIsNull(0)?Json::Value():Json::Value(result.columnText(0));j["rework_count"]=Json::Int64(result.columnInt(1));j["updated_at"]=result.columnText(2);j["completed_at"]=result.columnIsNull(3)?Json::Value():Json::Value(result.columnText(3));std::cout<<j;return 0;
+        auto result=db.prepare("SELECT repair_summary,rework_count,updated_at,completed_at,closed_at FROM work_orders WHERE id=?1");result.bindInt(1,id);result.step();j["repair_summary"]=result.columnIsNull(0)?Json::Value():Json::Value(result.columnText(0));j["rework_count"]=Json::Int64(result.columnInt(1));j["updated_at"]=result.columnText(2);j["completed_at"]=result.columnIsNull(3)?Json::Value():Json::Value(result.columnText(3));j["closed_at"]=result.columnIsNull(4)?Json::Value():Json::Value(result.columnText(4));
+        j["evaluations"]=Json::arrayValue;auto ratings=db.prepare("SELECT id,order_id,reporter_id,score,comment,created_at FROM evaluations WHERE order_id=?1 ORDER BY id");ratings.bindInt(1,id);while(ratings.step()){Json::Value e;e["id"]=Json::Int64(ratings.columnInt(0));e["order_id"]=Json::Int64(ratings.columnInt(1));e["reporter_id"]=Json::Int64(ratings.columnInt(2));e["score"]=Json::Int64(ratings.columnInt(3));e["comment"]=ratings.columnIsNull(4)?Json::Value():Json::Value(ratings.columnText(4));e["created_at"]=ratings.columnText(5);j["evaluations"].append(e);}std::cout<<j;return 0;
     }
     if(argc==5&&std::string(argv[1])=="--mode") {
         SqliteConnection db(argv[2]);SqliteTransaction tx(db);const std::string mode=argv[3];const auto id=std::stoll(argv[4]);
@@ -60,6 +61,12 @@ int main(int argc,char **argv){try{initializeCrypto();
             const auto table=mode=="fail-assignment"?"assignments":mode=="fail-order"?"work_orders":mode=="fail-log"?"status_logs":"transfer_requests";const auto action=mode=="fail-log"||mode=="fail-insert-transfer"?"INSERT":"UPDATE";
             db.execute("CREATE TRIGGER workflow_http_failure BEFORE "+std::string(action)+" ON "+table+" BEGIN SELECT RAISE(ABORT,'PRIVATE_WORKFLOW_FAILURE'); END");
         }
+        else if(mode=="fail-evaluation")db.execute("CREATE TRIGGER workflow_http_failure BEFORE INSERT ON evaluations BEGIN SELECT RAISE(ABORT,'PRIVATE_WORKFLOW_FAILURE'); END");
+        else if(mode=="active-anomaly"){auto q=db.prepare("UPDATE assignments SET ended_at=NULL,end_reason=NULL WHERE order_id=?1");q.bindInt(1,id);q.step();}
+        else if(mode=="admin-close")test::grant(db,"demo_sysadmin","CLOSE",1);
+        else if(mode=="admin-close-foreign")test::grant(db,"demo_sysadmin","CLOSE",2);
+        else if(mode=="revoke-close")test::revoke(db,"demo_sysadmin","CLOSE");
+        else if(mode=="disable-admin"||mode=="enable-admin"){auto q=db.prepare("UPDATE users SET status=?1 WHERE username='demo_sysadmin'");q.bindText(1,mode=="disable-admin"?"DISABLED":"ACTIVE");q.step();}
         else if(mode=="admin-dispatch")test::grant(db,"demo_sysadmin","DISPATCH",1);
         else if(mode=="admin-read")test::grant(db,"demo_sysadmin","BUSINESS_READ",1);
         else if(mode=="remove-admin-read")test::revoke(db,"demo_sysadmin","BUSINESS_READ");

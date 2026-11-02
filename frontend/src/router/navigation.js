@@ -12,6 +12,7 @@ export const navigation = [
   { id: 'worker-history', path: '/worker/history', title: '维修记录', roles: ['worker'] },
   { id: 'worker-profile', path: '/worker/profile', title: '本人维修档案', roles: ['worker'] },
   { id: 'admin-orders', path: '/admin/orders', title: '工单管理', roles: ['dispatcher', 'sysadmin'], capability: 'BUSINESS_READ' },
+  { id: 'admin-close', path: '/admin/close', title: '可关闭工单', roles: ['dispatcher', 'sysadmin'], capability: 'CLOSE' },
   { id: 'admin-review', path: '/admin/review', title: '工单审核', roles: ['dispatcher', 'sysadmin'], capability: 'REVIEW' },
   { id: 'admin-dispatch', path: '/admin/dispatch', title: '智能派单', roles: ['dispatcher', 'sysadmin'], capability: 'DISPATCH' },
   { id: 'admin-workers', path: '/admin/workers', title: '维修人员管理', roles: ['dispatcher', 'sysadmin'], capability: 'WORKER_MANAGE' },

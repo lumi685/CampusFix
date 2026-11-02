@@ -11,7 +11,7 @@ export const actions = {
   ORDER_ACCEPTED: '维修人员接单', ORDER_REFUSED: '拒单', TRANSFER_REQUESTED: '申请转派',
   TRANSFER_APPROVED: '转派获批', TRANSFER_REJECTED: '转派未通过', ORDER_COMPLETED: '提交维修结果',
   ORDER_VERIFIED: '验收通过', ORDER_REWORK_REQUESTED: '要求返工', ORDER_CANCELLED: '工单取消',
-  ORDER_CLOSED: '工单关闭', ORDER_EVALUATED: '评价', WORKER_ARRIVED: '维修人员到场', WORKER_PROGRESS_NOTE: '维修进度',
+  ORDER_CLOSED: '工单关闭', EVALUATION_CREATED: '评价', ORDER_EVALUATED: '评价（历史标记）', WORKER_ARRIVED: '维修人员到场', WORKER_PROGRESS_NOTE: '维修进度',
 }
 export function dateText(value) {
   if (!value) return '—'

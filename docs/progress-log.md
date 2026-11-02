@@ -1,5 +1,9 @@
 # CampusFix 进度与交接记录
 
+### W7-D5 受控扩展批准（2026-11-02，批准时记录）
+
+用户正式批准D-022/API-35《CLOSE-only最小授权可关闭工单队列》。先核对编号未占用并补充契约，再实施专用只读队列；不扩大BUSINESS_READ/详情/时间线/评价权限。此条记录批准时状态，最终实施及回归结论见文末W7-D5；浏览器人工验收按用户决定统一延期。
+
 > 本记录根据 2026-10-21 用户补充的丢失对话、仓库文件和本地 Git 状态整理。历史对话中的检查结果按“当时记录”标注；当前状态以再次核对的仓库为准。本文件只记录进度，不修改已冻结需求。
 
 ## W1 设计阶段
@@ -699,3 +703,18 @@
 - **真实浏览器桌面/390px/Network/Console未验证**。依computer-use技能检查连接返回apps/browsers空及host/native pipe不可用；没有登录/截图/用户反馈，不冒称人工通过。保留内存Token、未知回执、离线撤销、限流/压测/跨机/物理故障/大chunk等风险，新增有界历史超限关闭入口的限制已记录。
 - 本轮预期修改6/新增11/删除0，共17文件，全部未暂存；完整源文件、HTTP/SQLite证据与最终Git、编码及全量结果见 `docs/W7-D4-acceptance-report.md`。不git add/commit/push/merge，不进入W7-D5，等待独立源码及人工验收。
 - 最终结项：加强每轮派单整行不变断言后完整CTest **48/48、失败0、退出0、280.02秒**，前端最终 **270/270** 和构建通过；身份失效/时间线401/403/404同时清除旧退回原因、分页和操作提示。真实HTTP8/289/216、W2冒烟0、完整性ok/FK空；原45项CTest核对遗漏0。Git6修改/11新增/0删除全部未暂存、空白/UTF-8/换行及保护基线核查通过，8848/5173无监听。上述首次失败历史保留，不累计重跑数字。**CampusFix W7-D4 原报修人验收与返工实现与自动化验证已完成，等待独立源码审查；未进入W7-D5。**浏览器人工验收待补。
+
+### W7-D5 — 一次性评价、管理员关闭与完整闭环（2026-11-02）
+
+- 起始feature/w7-workflow，fetch后HEAD/远端均`0dad330913aaf75da8a17ccbe89de378b0ba974c`，工作区/暂存区干净。实现FR-010/API-25/26/27及T-22/T-23，复用原AuthGuard/Policy/事务/日志，不改Schema/seed、原状态机和权限、调度权重/AI或依赖。
+- API-25严格JSON整数1～5、可选1000 Unicode评论及真实版本；BEGIN IMMEDIATE重认证、D-017本人归属、COMPLETED/版本/唯一评价校验，插入evaluations和EVALUATION_CREATED日志，最终认证与不变量核查。评价不改变工单状态/版本/updated_at、派单/负载；真实数据库UNIQUE(order_id)拒绝重复。CLOSED禁止新评价；管理员/维修参与身份不能代评价。
+- API-26继承ActionRead及白名单，专用query_only连接和只读快照，未评价null；合法历史维修/管理读取者及CLOSED可读，不泄露reporter_id/联系/原始metadata。API-27按AREA_SCOPE或CLOSE自身范围，在写事务内核查真实COMPLETED/版本/完成时间及ORDER_VERIFIED/结束派单证据、无有效派单、溢出，条件更新CLOSED/version+1及UTC时间、追加ORDER_CLOSED；复核权限与历史/评价不变量。可不评价关闭，不自动结束异常有效派单。
+- 发现CLOSE-only没有合法发现路径，明确报告并取得用户正式批准D-022/API-35，先同步契约/决策/FR-010/UI说明，再实现只读最小队列。仅COMPLETED、合法completed_at、无有效派单、有效AREA_SCOPE/CLOSE范围；递归祖先/全局/重叠去重，一致快照计数分页，严格五字段白名单；不要求或扩大BUSINESS_READ。GET不保证关闭资格，API-27仍重新鉴权。静态closable与动态ID路由真实HTTP均正确。
+- Vue增加OrderEvaluationPanel、OrderClosePanel及独立/admin/close队列。评价读取与本人写资格分离，复用reported分页及版本栅栏；CLOSE-only只访问API-35/27，不访问详情/时间线/评价。二次确认、防双击、422留输入、409清旧上下文、401/403/404清资料、未知结果仅GET不重发，generation防账号/路由/授权切换和迟到响应；成功重读真实数据，不假造CLOSED。
+- 本轮MSVC Debug完整构建退出0；新增evaluation_service **7场景109断言**、evaluation_concurrency **6场景18断言**、closable_query_service **5场景86断言**及evaluation_http。最终全量CTest **52/52、失败0、退出0、285.74秒**；展开原foreach后核对起始48项遗漏0。独立连接争锁与强制评价先/关闭先都验证，WAL并发真实关闭时total/items仍一致快照；各写节点ABORT/IGNORE和事务末尾停用全表回滚。
+- 真实Vite→Drogon→临时SQLite **13场景、418次记录HTTP、364次独立16表指纹采集**，含API-35 GET26次，不累计重跑。工单5正常全链路CLOSED/8，评价保持COMPLETED/7；6无评价关闭；7两轮返工三份结果CLOSED/12；8真实转派后两份派单/调度历史CLOSED/10；9 worker本人报修评价成功。有效派单结束COMPLETED、容量准确释放，历史和结果时间保留；CLOSE-only工单15真实队列→关闭/8，但详情/时间线/评价404。实际SQL故障500、BUSY503、已提交回执丢失未知结果、终态及角色/跨区保护均覆盖。integrity_check=ok、foreign_key_check为空，既有W2烟测退出0；自有进程/随机端口、临时库及凭据清理，不操作用户演示库。
+- 前端原270项保留，新39项，最终 **309/309、退出0**；包括SFC setup/模板编译及模拟生命周期，不是浏览器E2E。Vite构建退出0，JS842.68kB/gzip268.22kB，保留既有大chunk警告。
+- 首次失败历史保留于W7-D5报告：沙箱FileTracker权限、测试头文件/auto类型、新组件测试注入/静态安全断言、误把独立HTTP入口混入单测、API-34字段名、回环代理502、终态编辑测试缺完整字段导致首轮全量51/52。均最小修复，未删既有断言或改业务规则。测试进程临时补NO_PROXY后finally恢复，未改系统代理；最终全量重新执行，不把旧结果冒充本轮通过。
+- **W7全阶段真实浏览器、桌面/390px、Network/Console仍未验证**，按用户决定待D5源码审查通过并提交后统一人工验收；总体清单18组均待执行，保留D1～D4历史待验记录。内存Token刷新、离线撤销不确定、未完整限流、跨机器/压力/物理故障、未知写结果无跨刷新回执、5000条归属扫描上限和大chunk等风险保留。
+- 文件范围修改15/新增17/删除0，共32项，全部未暂存；完整清单、命令、HTTP/SQLite样本及最终Git核验见`docs/W7-D5-acceptance-report.md`。没有git add/commit/push/merge，不进入W8，不合并main。
+- **CampusFix W7-D5 一次性评价、管理员关闭及完整W7业务闭环实现与自动化验证已完成，等待独立源码审查。W7全阶段浏览器人工验收将在D5通过源码审查并提交后统一执行；未合并main。**

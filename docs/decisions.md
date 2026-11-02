@@ -133,6 +133,17 @@
 - 替代方案：拒绝管理员猜ID、从分页历史时间线推断PENDING、扩张详情/内部备注权限或新增大型管理系统；单个最小只读接口支持既有审批业务。
 - 冻结影响：在原16表/33接口基线上受控增加第34接口，不新增FR、表、角色/能力码，不修改既有API及其字段可见性。最小同步SRS接口索引、需求追踪、API契约及UI说明；原冻结与历史验收记录保留。
 
+### D-022 CLOSE-only 最小授权可关闭工单队列
+
+- 日期：2026-11-02；状态：已接受（用户在 W7-D5 正式批准）。
+- 背景：现有管理列表、详情及时间线需要 BUSINESS_READ；仅有 CLOSE 的 sysadmin 无法合法发现待关闭工单，不能猜 ID 或扩大读取权限。
+- 决定：新增 API-35 `GET /api/work-orders/closable`，只读分页查询当前 COMPLETED、completed_at 有效且无有效派单的工单；dispatcher 按 AREA_SCOPE、sysadmin 按 CLOSE 自身位置范围，全局授权及祖先/后代、重叠去重适用。其他能力不能替代 CLOSE。
+- 白名单：仅 `id/order_no/status/version/updated_at`；默认 page=1/page_size=20，最大100，`updated_at DESC,id DESC`。统一分页和 request_id；参数化 SQL、query_only 专用连接、一致快照中认证/授权/计数/分页；成功和失败不写业务数据。
+- 前端：独立最小关闭队列，不要求 BUSINESS_READ，不读取详情、时间线或评价；以实际返回 ID/version 二次确认 API-27。未知结果只重新 GET 队列，不能证明原 POST 成功，不能自动重放。
+- API-27 仍在 BEGIN IMMEDIATE 中重新认证、CLOSE 范围、状态/版本、验收历史证据及无有效派单校验；GET 不保证后续仍可关闭。
+- 替代方案：拒绝管理员猜 ID、放宽 BUSINESS_READ/详情/时间线或以客户端构造列表；原有可读管理工作流保留。
+- 冻结影响：在 API-01～34 上受控增加最小只读接口，不新增 FR、表、状态或能力，不改变原接口/权限语义；同步 API 契约、FR-010、UI 及进度/验收记录。
+
 ## 新决策模板
 
 ### D-XXX （标题待定）

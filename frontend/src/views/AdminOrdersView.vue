@@ -30,7 +30,7 @@ async function load(reset = false) {
   }
   finally { if (request === sequence) busy.value = false }
 }
-watch(canRead, () => load(), { immediate: true })
+watch(() => [canRead.value,authState.status,authState.user?.id,authState.user?.role,authState.user?.capabilities?.join(','),authState.user?.scope_location_ids?.join(',')].join('|'), () => { detailId.value=undefined;reviewId.value=undefined;load() }, { immediate: true,flush:'sync' })
 onBeforeUnmount(() => { sequence++ })
 function changed() { detailId.value = undefined; load() }
 </script>
@@ -58,7 +58,7 @@ function changed() { detailId.value = undefined; load() }
       </el-table>
       <el-pagination v-if="total" v-model:current-page="page" :page-size="20" :total="total" :disabled="busy" layout="prev, pager, next, total" @current-change="load()" />
     </template>
-    <AdminOrderDetailDrawer :order-id="detailId" @close="detailId = undefined" />
+    <AdminOrderDetailDrawer :order-id="detailId" @close="detailId = undefined" @changed="load()" />
     <OrderReviewDrawer :order-id="reviewId" @close="reviewId = undefined" @changed="changed" />
   </main>
 </template>
